@@ -7,6 +7,8 @@ import Index from "./pages/Index";
 import TeamPage from "./pages/TeamPage";
 import CentersPage from "./pages/CentersPage";
 import SchedulePage from "./pages/SchedulePage";
+import OperationsPage from "./pages/OperationsPage";
+import RestrictionsPage from "./pages/RestrictionsPage";
 import NotificationsPage from "./pages/NotificationsPage";
 import NotFound from "./pages/NotFound";
 
@@ -22,7 +24,9 @@ const App = () => (
           <Route path="/" element={<Index />} />
           <Route path="/team" element={<TeamPage />} />
           <Route path="/centers" element={<CentersPage />} />
+          <Route path="/operations" element={<OperationsPage />} />
           <Route path="/schedule" element={<SchedulePage />} />
+          <Route path="/restrictions" element={<RestrictionsPage />} />
           <Route path="/notifications" element={<NotificationsPage />} />
           {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
           <Route path="*" element={<NotFound />} />

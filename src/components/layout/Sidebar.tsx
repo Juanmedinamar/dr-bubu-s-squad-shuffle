@@ -5,7 +5,9 @@ import {
   Building2, 
   Calendar, 
   Send,
-  Stethoscope
+  Stethoscope,
+  Scissors,
+  ShieldAlert
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -13,7 +15,9 @@ const navItems = [
   { icon: LayoutDashboard, label: 'Dashboard', path: '/' },
   { icon: Users, label: 'Equipo', path: '/team' },
   { icon: Building2, label: 'Centros', path: '/centers' },
+  { icon: Scissors, label: 'Operaciones', path: '/operations' },
   { icon: Calendar, label: 'Planificación', path: '/schedule' },
+  { icon: ShieldAlert, label: 'Restricciones', path: '/restrictions' },
   { icon: Send, label: 'Notificaciones', path: '/notifications' },
 ];
 

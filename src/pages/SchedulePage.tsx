@@ -11,14 +11,30 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import { ChevronLeft, ChevronRight, Plus, Save, AlertTriangle } from 'lucide-react';
-import { DAYS_OF_WEEK, SHIFTS } from '@/types';
-import { mockTeamMembers, mockCenters, mockAssignments } from '@/data/mockData';
+import {
+  Dialog,
+  DialogContent,
+  DialogHeader,
+  DialogTitle,
+  DialogFooter,
+} from '@/components/ui/dialog';
+import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors } from 'lucide-react';
+import { DAYS_OF_WEEK, SHIFTS, Assignment } from '@/types';
+import { mockTeamMembers, mockCenters, mockAssignments, mockOperations, generateDemandSlots } from '@/data/mockData';
 import { cn } from '@/lib/utils';
 
 export default function SchedulePage() {
   const [selectedCenter, setSelectedCenter] = useState<string>('all');
   const [weekOffset, setWeekOffset] = useState(0);
+  const [assignments, setAssignments] = useState<Assignment[]>(mockAssignments);
+  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
+  const [selectedSlot, setSelectedSlot] = useState<{
+    centerId: string;
+    date: string;
+    shift: 'morning' | 'afternoon';
+  } | null>(null);
+
+  const demandSlots = generateDemandSlots(mockOperations);
 
   const getWeekDates = () => {
     const today = new Date();
@@ -38,18 +54,73 @@ export default function SchedulePage() {
 
   const weekDates = getWeekDates();
 
-  const getAssignmentsForDayAndCenter = (date: string, centerId: string) => {
-    return mockAssignments.filter(a => {
+  const getAssignmentsForSlot = (date: string, centerId: string, shift: 'morning' | 'afternoon') => {
+    return assignments.filter(a => {
       const matchesDate = a.date === date;
-      const matchesCenter = centerId === 'all' || a.centerId === centerId;
-      return matchesDate && matchesCenter;
+      const matchesCenter = a.centerId === centerId;
+      const matchesShift = a.shift === shift || a.shift === 'full';
+      return matchesDate && matchesCenter && matchesShift;
     });
   };
+
+  const getDemandForSlot = (date: string, centerId: string, shift: 'morning' | 'afternoon') => {
+    const slot = demandSlots.find(s => s.date === date && s.centerId === centerId && s.shift === shift);
+    return {
+      requiredAnesthetists: slot?.requiredAnesthetists || 0,
+      requiredNurses: slot?.requiredNurses || 0,
+      operationsCount: slot?.operations.length || 0,
+    };
+  };
+
+  const getAvailableMembers = (date: string, centerId: string, shift: 'morning' | 'afternoon') => {
+    const existingAssignments = assignments.filter(a => a.date === date);
+    const assignedMemberIds = existingAssignments.map(a => a.memberId);
+    
+    return mockTeamMembers.filter(member => {
+      // No asignado ya ese día
+      const isAlreadyAssigned = assignedMemberIds.includes(member.id);
+      // No tiene el centro excluido
+      const hasExcludedCenter = member.excludedCenters.includes(centerId);
+      // No es incompatible con alguien ya asignado al mismo slot
+      const slotAssignments = getAssignmentsForSlot(date, centerId, shift);
+      const hasIncompatibility = slotAssignments.some(a => 
+        member.incompatibleWith.includes(a.memberId)
+      );
+      
+      return !isAlreadyAssigned && !hasExcludedCenter && !hasIncompatibility;
+    });
+  };
+
+  const handleOpenAssignDialog = (centerId: string, date: string, shift: 'morning' | 'afternoon') => {
+    setSelectedSlot({ centerId, date, shift });
+    setIsAssignDialogOpen(true);
+  };
+
+  const handleAssignMember = (memberId: string) => {
+    if (!selectedSlot) return;
+    
+    const newAssignment: Assignment = {
+      id: `as${Date.now()}`,
+      memberId,
+      centerId: selectedSlot.centerId,
+      date: selectedSlot.date,
+      shift: selectedSlot.shift,
+    };
+    
+    setAssignments(prev => [...prev, newAssignment]);
+  };
+
+  const handleRemoveAssignment = (assignmentId: string) => {
+    setAssignments(prev => prev.filter(a => a.id !== assignmentId));
+  };
+
+  const getCenterName = (centerId: string) => mockCenters.find(c => c.id === centerId)?.name || '';
+  const getCenterColor = (centerId: string) => mockCenters.find(c => c.id === centerId)?.color || '#888';
 
   return (
     <MainLayout 
       title="Planificación" 
-      subtitle="Asignación de turnos semanales"
+      subtitle="Asignación de turnos semanales por demanda"
     >
       {/* Controls */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -101,120 +172,257 @@ export default function SchedulePage() {
         </div>
       </div>
 
-      {/* Calendar Grid */}
-      <Card>
-        <CardContent className="p-4">
-          <div className="grid grid-cols-8 gap-2">
-            {/* Header */}
-            <div className="p-2 font-medium text-muted-foreground text-sm">
-              Centro
-            </div>
-            {weekDates.map(({ day, date }, index) => (
-              <div 
-                key={day} 
-                className={cn(
-                  'p-2 text-center rounded-lg',
-                  index === 4 ? 'bg-primary text-primary-foreground' : 'bg-secondary'
-                )}
-              >
-                <div className="font-medium text-sm">{day.slice(0, 3)}</div>
-                <div className="text-xs opacity-80">{date}</div>
-              </div>
-            ))}
-
-            {/* Rows per center */}
-            {(selectedCenter === 'all' ? mockCenters : mockCenters.filter(c => c.id === selectedCenter)).map((center) => (
-              <>
+      {/* Schedule Grid by Center with Shifts */}
+      <div className="space-y-4">
+        {(selectedCenter === 'all' ? mockCenters : mockCenters.filter(c => c.id === selectedCenter)).map((center) => (
+          <Card key={center.id}>
+            <CardHeader className="pb-3">
+              <CardTitle className="flex items-center gap-2 text-lg">
                 <div 
-                  key={center.id}
-                  className="flex items-center gap-2 p-2 rounded-lg"
-                  style={{ backgroundColor: `${center.color}10` }}
-                >
-                  <div 
-                    className="w-2 h-8 rounded-full"
-                    style={{ backgroundColor: center.color }}
-                  />
-                  <span className="text-sm font-medium truncate">{center.name}</span>
-                </div>
-                {weekDates.map(({ fullDate }) => {
-                  const assignments = getAssignmentsForDayAndCenter(fullDate, center.id);
-                  
-                  return (
-                    <div 
-                      key={`${center.id}-${fullDate}`}
-                      className="min-h-[80px] rounded-lg border border-dashed border-border p-2 hover:border-primary hover:bg-primary/5 transition-colors cursor-pointer"
-                    >
-                      {assignments.length > 0 ? (
-                        <div className="space-y-1">
-                          {assignments.map((assignment) => {
-                            const member = mockTeamMembers.find(m => m.id === assignment.memberId);
-                            if (!member) return null;
-                            
-                            return (
+                  className="w-3 h-3 rounded-full"
+                  style={{ backgroundColor: center.color }}
+                />
+                {center.name}
+              </CardTitle>
+            </CardHeader>
+            <CardContent>
+              <div className="overflow-x-auto">
+                <table className="w-full border-collapse">
+                  <thead>
+                    <tr>
+                      <th className="p-2 text-left text-sm font-medium text-muted-foreground w-[100px]">Turno</th>
+                      {weekDates.slice(0, 5).map(({ day, date }, index) => (
+                        <th 
+                          key={day} 
+                          className={cn(
+                            'p-2 text-center rounded-lg min-w-[140px]',
+                            index === new Date().getDay() - 1 ? 'bg-primary text-primary-foreground' : 'bg-secondary'
+                          )}
+                        >
+                          <div className="font-medium text-sm">{day.slice(0, 3)}</div>
+                          <div className="text-xs opacity-80">{date}</div>
+                        </th>
+                      ))}
+                    </tr>
+                  </thead>
+                  <tbody>
+                    {(['morning', 'afternoon'] as const).map((shift) => (
+                      <tr key={shift}>
+                        <td className="p-2 font-medium">
+                          <Badge variant="outline">{SHIFTS[shift]}</Badge>
+                        </td>
+                        {weekDates.slice(0, 5).map(({ fullDate }) => {
+                          const slotAssignments = getAssignmentsForSlot(fullDate, center.id, shift);
+                          const demand = getDemandForSlot(fullDate, center.id, shift);
+                          const assignedAnesthetists = slotAssignments.filter(a => 
+                            mockTeamMembers.find(m => m.id === a.memberId)?.role === 'anesthetist'
+                          ).length;
+                          const isCovered = assignedAnesthetists >= demand.requiredAnesthetists;
+                          
+                          return (
+                            <td key={fullDate} className="p-2">
                               <div 
-                                key={assignment.id}
                                 className={cn(
-                                  'rounded p-1.5 text-xs',
+                                  'min-h-[100px] rounded-lg border p-2 transition-colors',
+                                  demand.operationsCount > 0 
+                                    ? isCovered 
+                                      ? 'border-success/50 bg-success/5' 
+                                      : 'border-warning/50 bg-warning/5'
+                                    : 'border-dashed border-border',
+                                  'hover:border-primary cursor-pointer'
+                                )}
+                                onClick={() => handleOpenAssignDialog(center.id, fullDate, shift)}
+                              >
+                                {/* Demand header */}
+                                {demand.operationsCount > 0 && (
+                                  <div className="flex items-center justify-between text-xs mb-2 pb-2 border-b">
+                                    <div className="flex items-center gap-1">
+                                      <Scissors className="h-3 w-3 text-muted-foreground" />
+                                      <span>{demand.operationsCount} ops</span>
+                                    </div>
+                                    <div className={cn(
+                                      'flex items-center gap-1 font-medium',
+                                      isCovered ? 'text-success' : 'text-warning'
+                                    )}>
+                                      <Users className="h-3 w-3" />
+                                      <span>{assignedAnesthetists}/{demand.requiredAnesthetists}</span>
+                                    </div>
+                                  </div>
+                                )}
+                                
+                                {/* Assignments */}
+                                <div className="space-y-1">
+                                  {slotAssignments.map((assignment) => {
+                                    const member = mockTeamMembers.find(m => m.id === assignment.memberId);
+                                    if (!member) return null;
+                                    
+                                    return (
+                                      <div 
+                                        key={assignment.id}
+                                        className={cn(
+                                          'rounded p-1.5 text-xs flex items-center justify-between group',
+                                          member.role === 'anesthetist' 
+                                            ? 'bg-anesthetist-light text-anesthetist' 
+                                            : 'bg-nurse-light text-nurse'
+                                        )}
+                                        onClick={(e) => e.stopPropagation()}
+                                      >
+                                        <div className="flex items-center gap-1.5 truncate">
+                                          <Avatar className="h-5 w-5">
+                                            <AvatarFallback className={cn(
+                                              'text-[10px] text-white',
+                                              member.role === 'anesthetist' ? 'bg-anesthetist' : 'bg-nurse'
+                                            )}>
+                                              {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                            </AvatarFallback>
+                                          </Avatar>
+                                          <span className="font-medium truncate">{member.name}</span>
+                                        </div>
+                                        <button 
+                                          className="opacity-0 group-hover:opacity-100 hover:bg-secondary rounded p-0.5 transition-opacity"
+                                          onClick={() => handleRemoveAssignment(assignment.id)}
+                                        >
+                                          <X className="h-3 w-3" />
+                                        </button>
+                                      </div>
+                                    );
+                                  })}
+                                </div>
+                              </div>
+                            </td>
+                          );
+                        })}
+                      </tr>
+                    ))}
+                  </tbody>
+                </table>
+              </div>
+            </CardContent>
+          </Card>
+        ))}
+      </div>
+
+      {/* Assign Member Dialog */}
+      <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
+        <DialogContent className="max-w-md">
+          <DialogHeader>
+            <DialogTitle>
+              Asignar personal
+            </DialogTitle>
+            {selectedSlot && (
+              <div className="text-sm text-muted-foreground">
+                {getCenterName(selectedSlot.centerId)} - {selectedSlot.date} - {SHIFTS[selectedSlot.shift]}
+              </div>
+            )}
+          </DialogHeader>
+          <div className="py-4">
+            {selectedSlot && (
+              <>
+                {/* Current assignments */}
+                {getAssignmentsForSlot(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).length > 0 && (
+                  <div className="mb-4">
+                    <h4 className="text-sm font-medium mb-2">Asignados actualmente:</h4>
+                    <div className="space-y-2">
+                      {getAssignmentsForSlot(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map((assignment) => {
+                        const member = mockTeamMembers.find(m => m.id === assignment.memberId);
+                        if (!member) return null;
+                        
+                        return (
+                          <div 
+                            key={assignment.id}
+                            className="flex items-center justify-between p-2 rounded-lg border"
+                          >
+                            <div className="flex items-center gap-2">
+                              <Avatar className="h-7 w-7">
+                                <AvatarFallback className={cn(
+                                  'text-xs text-white',
+                                  member.role === 'anesthetist' ? 'bg-anesthetist' : 'bg-nurse'
+                                )}>
+                                  {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                </AvatarFallback>
+                              </Avatar>
+                              <span className="font-medium">{member.name}</span>
+                              <Badge 
+                                variant="secondary" 
+                                className={cn(
+                                  'text-xs border-0',
                                   member.role === 'anesthetist' 
                                     ? 'bg-anesthetist-light text-anesthetist' 
                                     : 'bg-nurse-light text-nurse'
                                 )}
                               >
-                                <div className="font-medium truncate">{member.name}</div>
-                                <div className="opacity-80">{SHIFTS[assignment.shift]}</div>
-                              </div>
-                            );
-                          })}
-                        </div>
-                      ) : (
-                        <div className="h-full flex items-center justify-center">
-                          <Plus className="h-4 w-4 text-muted-foreground opacity-0 group-hover:opacity-100 transition-opacity" />
-                        </div>
-                      )}
+                                {member.role === 'anesthetist' ? 'Anestesista' : 'Enfermero'}
+                              </Badge>
+                            </div>
+                            <Button 
+                              variant="ghost" 
+                              size="sm"
+                              className="text-destructive hover:text-destructive"
+                              onClick={() => handleRemoveAssignment(assignment.id)}
+                            >
+                              <X className="h-4 w-4" />
+                            </Button>
+                          </div>
+                        );
+                      })}
                     </div>
-                  );
-                })}
-              </>
-            ))}
-          </div>
-        </CardContent>
-      </Card>
+                  </div>
+                )}
 
-      {/* Team sidebar */}
-      <div className="mt-6">
-        <Card>
-          <CardHeader>
-            <CardTitle className="text-lg">Equipo disponible para asignar</CardTitle>
-          </CardHeader>
-          <CardContent>
-            <div className="flex flex-wrap gap-2">
-              {mockTeamMembers.slice(0, 10).map((member) => (
-                <div
-                  key={member.id}
-                  draggable
-                  className={cn(
-                    'flex items-center gap-2 rounded-lg border p-2 cursor-grab hover:shadow-md transition-shadow',
-                    member.role === 'anesthetist' ? 'border-anesthetist/30' : 'border-nurse/30'
-                  )}
-                >
-                  <Avatar className="h-7 w-7">
-                    <AvatarFallback className={cn(
-                      'text-xs text-white',
-                      member.role === 'anesthetist' ? 'bg-anesthetist' : 'bg-nurse'
-                    )}>
-                      {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                    </AvatarFallback>
-                  </Avatar>
-                  <span className="text-sm font-medium">{member.name}</span>
-                  {(member.excludedCenters.length > 0 || member.incompatibleWith.length > 0) && (
-                    <AlertTriangle className="h-3 w-3 text-warning" />
-                  )}
+                {/* Available members */}
+                <div>
+                  <h4 className="text-sm font-medium mb-2">Personal disponible:</h4>
+                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
+                    {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map((member) => (
+                      <div 
+                        key={member.id}
+                        className="flex items-center justify-between p-2 rounded-lg border hover:bg-secondary/50 cursor-pointer transition-colors"
+                        onClick={() => handleAssignMember(member.id)}
+                      >
+                        <div className="flex items-center gap-2">
+                          <Avatar className="h-7 w-7">
+                            <AvatarFallback className={cn(
+                              'text-xs text-white',
+                              member.role === 'anesthetist' ? 'bg-anesthetist' : 'bg-nurse'
+                            )}>
+                              {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                            </AvatarFallback>
+                          </Avatar>
+                          <span className="font-medium">{member.name}</span>
+                          <Badge 
+                            variant="secondary" 
+                            className={cn(
+                              'text-xs border-0',
+                              member.role === 'anesthetist' 
+                                ? 'bg-anesthetist-light text-anesthetist' 
+                                : 'bg-nurse-light text-nurse'
+                            )}
+                          >
+                            {member.role === 'anesthetist' ? 'Anestesista' : 'Enfermero'}
+                          </Badge>
+                        </div>
+                        {(member.excludedCenters.length > 0 || member.incompatibleWith.length > 0) && (
+                          <AlertTriangle className="h-4 w-4 text-warning" />
+                        )}
+                      </div>
+                    ))}
+                    {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).length === 0 && (
+                      <div className="text-center py-4 text-muted-foreground text-sm">
+                        No hay personal disponible para este turno
+                      </div>
+                    )}
+                  </div>
                 </div>
-              ))}
-            </div>
-          </CardContent>
-        </Card>
-      </div>
+              </>
+            )}
+          </div>
+          <DialogFooter>
+            <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)}>
+              Cerrar
+            </Button>
+          </DialogFooter>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

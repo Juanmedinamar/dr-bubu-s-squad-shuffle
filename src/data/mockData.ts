@@ -1,4 +1,4 @@
-import { TeamMember, Center, Assignment } from '@/types';
+import { TeamMember, Center, Assignment, Operation, DemandSlot } from '@/types';
 
 export const mockCenters: Center[] = [
   { id: 'c1', name: 'Hospital Central', address: 'Av. Principal 123', color: '#0ea5e9' },
@@ -46,8 +46,59 @@ export const mockTeamMembers: TeamMember[] = [
 
 export const mockAssignments: Assignment[] = [
   { id: 'as1', memberId: 'a1', centerId: 'c1', date: '2024-01-22', shift: 'morning' },
-  { id: 'as2', memberId: 'a2', centerId: 'c2', date: '2024-01-22', shift: 'full' },
+  { id: 'as2', memberId: 'a2', centerId: 'c2', date: '2024-01-22', shift: 'morning' },
   { id: 'as3', memberId: 'e1', centerId: 'c1', date: '2024-01-22', shift: 'morning' },
   { id: 'as4', memberId: 'a3', centerId: 'c4', date: '2024-01-23', shift: 'afternoon' },
-  { id: 'as5', memberId: 'a4', centerId: 'c3', date: '2024-01-23', shift: 'full' },
+  { id: 'as5', memberId: 'a4', centerId: 'c3', date: '2024-01-23', shift: 'morning' },
+  { id: 'as6', memberId: 'a5', centerId: 'c1', date: '2024-01-22', shift: 'afternoon' },
+  { id: 'as7', memberId: 'a6', centerId: 'c2', date: '2024-01-22', shift: 'afternoon' },
 ];
+
+// Operaciones de ejemplo
+export const mockOperations: Operation[] = [
+  { id: 'op1', centerId: 'c1', date: '2024-01-22', shift: 'morning', operatingRoom: 'Q1', type: 'general', specialty: 'general', estimatedDuration: 120, requiredAnesthetists: 1, notes: 'Colecistectomía' },
+  { id: 'op2', centerId: 'c1', date: '2024-01-22', shift: 'morning', operatingRoom: 'Q2', type: 'cardiac', specialty: 'cardiac', estimatedDuration: 240, requiredAnesthetists: 2, notes: 'Bypass coronario' },
+  { id: 'op3', centerId: 'c1', date: '2024-01-22', shift: 'morning', operatingRoom: 'Q3', type: 'orthopedic', specialty: 'orthopedic', estimatedDuration: 90, requiredAnesthetists: 1 },
+  { id: 'op4', centerId: 'c1', date: '2024-01-22', shift: 'afternoon', operatingRoom: 'Q1', type: 'general', specialty: 'general', estimatedDuration: 60, requiredAnesthetists: 1 },
+  { id: 'op5', centerId: 'c1', date: '2024-01-22', shift: 'afternoon', operatingRoom: 'Q2', type: 'neuro', specialty: 'neuro', estimatedDuration: 180, requiredAnesthetists: 2 },
+  { id: 'op6', centerId: 'c2', date: '2024-01-22', shift: 'morning', operatingRoom: 'Q1', type: 'pediatric', specialty: 'pediatric', estimatedDuration: 90, requiredAnesthetists: 1 },
+  { id: 'op7', centerId: 'c2', date: '2024-01-22', shift: 'morning', operatingRoom: 'Q2', type: 'trauma', specialty: 'trauma', estimatedDuration: 150, requiredAnesthetists: 1 },
+  { id: 'op8', centerId: 'c2', date: '2024-01-22', shift: 'afternoon', operatingRoom: 'Q1', type: 'vascular', specialty: 'vascular', estimatedDuration: 180, requiredAnesthetists: 1 },
+  { id: 'op9', centerId: 'c3', date: '2024-01-23', shift: 'morning', operatingRoom: 'Q1', type: 'oncology', specialty: 'oncology', estimatedDuration: 200, requiredAnesthetists: 1 },
+  { id: 'op10', centerId: 'c4', date: '2024-01-23', shift: 'afternoon', operatingRoom: 'Q1', type: 'general', specialty: 'urology', estimatedDuration: 120, requiredAnesthetists: 1 },
+];
+
+// Función helper para calcular demanda basada en operaciones
+export const calculateDemand = (operations: Operation[], centerId: string, date: string, shift: 'morning' | 'afternoon'): number => {
+  const relevantOps = operations.filter(op => 
+    op.centerId === centerId && 
+    op.date === date && 
+    op.shift === shift
+  );
+  return relevantOps.reduce((sum, op) => sum + op.requiredAnesthetists, 0);
+};
+
+// Generar slots de demanda basados en operaciones
+export const generateDemandSlots = (operations: Operation[]): DemandSlot[] => {
+  const slotMap = new Map<string, DemandSlot>();
+  
+  operations.forEach(op => {
+    const key = `${op.centerId}-${op.date}-${op.shift}`;
+    if (!slotMap.has(key)) {
+      slotMap.set(key, {
+        centerId: op.centerId,
+        date: op.date,
+        shift: op.shift,
+        requiredAnesthetists: 0,
+        requiredNurses: 0,
+        operations: [],
+      });
+    }
+    const slot = slotMap.get(key)!;
+    slot.operations.push(op);
+    slot.requiredAnesthetists += op.requiredAnesthetists;
+    slot.requiredNurses += Math.ceil(op.requiredAnesthetists / 2); // 1 enfermero por cada 2 anestesistas
+  });
+  
+  return Array.from(slotMap.values());
+};

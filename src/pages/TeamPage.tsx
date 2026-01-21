@@ -13,22 +13,20 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { 
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogTrigger,
-} from '@/components/ui/dialog';
-import { Plus, Search, Mail, Phone, AlertCircle, Building2 } from 'lucide-react';
+import { Plus, Search, Mail, Phone, AlertCircle, Building2, Edit } from 'lucide-react';
 import { mockTeamMembers, mockCenters } from '@/data/mockData';
+import { TeamMember } from '@/types';
 import { cn } from '@/lib/utils';
+import { EditRestrictionsDialog } from '@/components/team/EditRestrictionsDialog';
 
 export default function TeamPage() {
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState<'all' | 'anesthetist' | 'nurse'>('all');
+  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
+  const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
+  const [isRestrictionsDialogOpen, setIsRestrictionsDialogOpen] = useState(false);
 
-  const filteredMembers = mockTeamMembers.filter(member => {
+  const filteredMembers = teamMembers.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase());
     const matchesRole = selectedRole === 'all' || member.role === selectedRole;
     return matchesSearch && matchesRole;
@@ -39,7 +37,31 @@ export default function TeamPage() {
   };
 
   const getMemberName = (memberId: string) => {
-    return mockTeamMembers.find(m => m.id === memberId)?.name || memberId;
+    return teamMembers.find(m => m.id === memberId)?.name || memberId;
+  };
+
+  const handleEditRestrictions = (member: TeamMember) => {
+    setEditingMember(member);
+    setIsRestrictionsDialogOpen(true);
+  };
+
+  const handleSaveRestrictions = (memberId: string, excludedCenters: string[], incompatibleWith: string[]) => {
+    setTeamMembers(prev => prev.map(m => {
+      if (m.id === memberId) {
+        return { ...m, excludedCenters, incompatibleWith };
+      }
+      // Sincronizar incompatibilidades bidireccionales
+      const wasIncompatible = teamMembers.find(tm => tm.id === memberId)?.incompatibleWith.includes(m.id);
+      const isNowIncompatible = incompatibleWith.includes(m.id);
+      
+      if (isNowIncompatible && !m.incompatibleWith.includes(memberId)) {
+        return { ...m, incompatibleWith: [...m.incompatibleWith, memberId] };
+      }
+      if (!isNowIncompatible && m.incompatibleWith.includes(memberId)) {
+        return { ...m, incompatibleWith: m.incompatibleWith.filter(id => id !== memberId) };
+      }
+      return m;
+    }));
   };
 
   return (
@@ -102,6 +124,7 @@ export default function TeamPage() {
                   <TableHead>Contacto</TableHead>
                   <TableHead>Restricciones</TableHead>
                   <TableHead>Incompatibilidades</TableHead>
+                  <TableHead className="w-[80px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -151,61 +174,32 @@ export default function TeamPage() {
                     </TableCell>
                     <TableCell>
                       {member.excludedCenters.length > 0 ? (
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-auto p-1">
-                              <div className="flex items-center gap-1 text-warning">
-                                <Building2 className="h-4 w-4" />
-                                <span>{member.excludedCenters.length} centros</span>
-                              </div>
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Centros excluidos - {member.name}</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-2">
-                              {member.excludedCenters.map((centerId) => (
-                                <div key={centerId} className="flex items-center gap-2 rounded-lg border p-3">
-                                  <Building2 className="h-4 w-4 text-muted-foreground" />
-                                  <span>{getCenterName(centerId)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                        <div className="flex items-center gap-1 text-warning">
+                          <Building2 className="h-4 w-4" />
+                          <span className="text-sm">{member.excludedCenters.length} centros</span>
+                        </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">Sin restricciones</span>
                       )}
                     </TableCell>
                     <TableCell>
                       {member.incompatibleWith.length > 0 ? (
-                        <Dialog>
-                          <DialogTrigger asChild>
-                            <Button variant="ghost" size="sm" className="h-auto p-1">
-                              <div className="flex items-center gap-1 text-destructive">
-                                <AlertCircle className="h-4 w-4" />
-                                <span>{member.incompatibleWith.length} personas</span>
-                              </div>
-                            </Button>
-                          </DialogTrigger>
-                          <DialogContent>
-                            <DialogHeader>
-                              <DialogTitle>Incompatibilidades - {member.name}</DialogTitle>
-                            </DialogHeader>
-                            <div className="space-y-2">
-                              {member.incompatibleWith.map((memberId) => (
-                                <div key={memberId} className="flex items-center gap-2 rounded-lg border p-3">
-                                  <AlertCircle className="h-4 w-4 text-destructive" />
-                                  <span>{getMemberName(memberId)}</span>
-                                </div>
-                              ))}
-                            </div>
-                          </DialogContent>
-                        </Dialog>
+                        <div className="flex items-center gap-1 text-destructive">
+                          <AlertCircle className="h-4 w-4" />
+                          <span className="text-sm">{member.incompatibleWith.length} personas</span>
+                        </div>
                       ) : (
                         <span className="text-sm text-muted-foreground">Ninguna</span>
                       )}
+                    </TableCell>
+                    <TableCell>
+                      <Button 
+                        variant="ghost" 
+                        size="sm"
+                        onClick={() => handleEditRestrictions(member)}
+                      >
+                        <Edit className="h-4 w-4" />
+                      </Button>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -214,6 +208,16 @@ export default function TeamPage() {
           </div>
         </CardContent>
       </Card>
+
+      {/* Edit Restrictions Dialog */}
+      <EditRestrictionsDialog
+        open={isRestrictionsDialogOpen}
+        onOpenChange={setIsRestrictionsDialogOpen}
+        member={editingMember}
+        allMembers={teamMembers}
+        allCenters={mockCenters}
+        onSave={handleSaveRestrictions}
+      />
     </MainLayout>
   );
 }

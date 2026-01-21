@@ -1,13 +1,60 @@
-// Update this page (the content is just a fallback if you fail to update the page)
+import { MainLayout } from '@/components/layout/MainLayout';
+import { StatCard } from '@/components/dashboard/StatCard';
+import { WeeklyOverview } from '@/components/dashboard/WeeklyOverview';
+import { TeamList } from '@/components/dashboard/TeamList';
+import { AlertsPanel } from '@/components/dashboard/AlertsPanel';
+import { Users, Building2, Calendar, AlertTriangle } from 'lucide-react';
+import { mockTeamMembers, mockCenters, mockAssignments } from '@/data/mockData';
 
 const Index = () => {
+  const anesthetistCount = mockTeamMembers.filter(m => m.role === 'anesthetist').length;
+  const nurseCount = mockTeamMembers.filter(m => m.role === 'nurse').length;
+  const conflictCount = mockTeamMembers.filter(m => m.incompatibleWith.length > 0).length;
+
   return (
-    <div className="flex min-h-screen items-center justify-center bg-background">
-      <div className="text-center">
-        <h1 className="mb-4 text-4xl font-bold">Welcome to Your Blank App</h1>
-        <p className="text-xl text-muted-foreground">Start building your amazing project here!</p>
+    <MainLayout 
+      title="Dashboard" 
+      subtitle="Gestión de turnos del equipo del Dr. Bubu"
+    >
+      {/* Stats */}
+      <div className="grid gap-4 md:grid-cols-2 lg:grid-cols-4 mb-6">
+        <StatCard
+          title="Anestesistas"
+          value={anesthetistCount}
+          icon={Users}
+          variant="anesthetist"
+        />
+        <StatCard
+          title="Enfermeros"
+          value={nurseCount}
+          icon={Users}
+          variant="nurse"
+        />
+        <StatCard
+          title="Centros"
+          value={mockCenters.length}
+          icon={Building2}
+          variant="center"
+        />
+        <StatCard
+          title="Incompatibilidades"
+          value={conflictCount}
+          icon={AlertTriangle}
+          variant="default"
+        />
       </div>
-    </div>
+
+      {/* Main Content */}
+      <div className="grid gap-6 lg:grid-cols-3">
+        <div className="lg:col-span-2">
+          <WeeklyOverview />
+        </div>
+        <div className="space-y-6">
+          <TeamList />
+          <AlertsPanel />
+        </div>
+      </div>
+    </MainLayout>
   );
 };
 

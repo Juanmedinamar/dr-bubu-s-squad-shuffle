@@ -3,13 +3,15 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { WeeklyOverview } from '@/components/dashboard/WeeklyOverview';
 import { TeamList } from '@/components/dashboard/TeamList';
 import { AlertsPanel } from '@/components/dashboard/AlertsPanel';
-import { Users, Building2, Calendar, AlertTriangle } from 'lucide-react';
-import { mockTeamMembers, mockCenters, mockAssignments } from '@/data/mockData';
+import { Users, Building2, AlertTriangle } from 'lucide-react';
+import { useData } from '@/context/DataContext';
 
 const Index = () => {
-  const anesthetistCount = mockTeamMembers.filter(m => m.role === 'anesthetist').length;
-  const nurseCount = mockTeamMembers.filter(m => m.role === 'nurse').length;
-  const conflictCount = mockTeamMembers.filter(m => m.incompatibleWith.length > 0).length;
+  const { teamMembers, centers } = useData();
+  
+  const anesthetistCount = teamMembers.filter(m => m.role === 'anesthetist').length;
+  const nurseCount = teamMembers.filter(m => m.role === 'nurse').length;
+  const conflictCount = teamMembers.filter(m => m.incompatibleWith.length > 0).length;
 
   return (
     <MainLayout 
@@ -32,7 +34,7 @@ const Index = () => {
         />
         <StatCard
           title="Centros"
-          value={mockCenters.length}
+          value={centers.length}
           icon={Building2}
           variant="center"
         />

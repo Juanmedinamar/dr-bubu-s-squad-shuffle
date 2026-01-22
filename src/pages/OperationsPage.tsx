@@ -17,7 +17,6 @@ import {
   DialogContent,
   DialogHeader,
   DialogTitle,
-  DialogTrigger,
   DialogFooter,
 } from '@/components/ui/dialog';
 import {
@@ -31,13 +30,15 @@ import {
 import { Textarea } from '@/components/ui/textarea';
 import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, Clock, Users, Stethoscope } from 'lucide-react';
 import { DAYS_OF_WEEK, SHIFTS, OPERATION_TYPES, SPECIALTIES, Operation, OperationType, Specialty } from '@/types';
-import { mockCenters, mockOperations, generateDemandSlots } from '@/data/mockData';
 import { cn } from '@/lib/utils';
+import { useData } from '@/context/DataContext';
+import { generateDemandSlots } from '@/data/mockData';
+import { toast } from 'sonner';
 
 export default function OperationsPage() {
+  const { centers, operations, setOperations } = useData();
   const [selectedCenter, setSelectedCenter] = useState<string>('all');
   const [weekOffset, setWeekOffset] = useState(0);
-  const [operations, setOperations] = useState<Operation[]>(mockOperations);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingOperation, setEditingOperation] = useState<Operation | null>(null);
   
@@ -103,7 +104,7 @@ export default function OperationsPage() {
     } else {
       setEditingOperation(null);
       setFormData({
-        centerId: centerId || '',
+        centerId: centerId || centers[0]?.id || '',
         date: date || weekDates[0].fullDate,
         shift: shift || 'morning',
         operatingRoom: '',
@@ -118,28 +119,33 @@ export default function OperationsPage() {
   };
 
   const handleSaveOperation = () => {
+    if (!formData.centerId || !formData.date || !formData.operatingRoom) {
+      toast.error('Por favor completa los campos obligatorios');
+      return;
+    }
+
     if (editingOperation) {
       setOperations(prev => prev.map(op => 
         op.id === editingOperation.id 
           ? { ...op, ...formData }
           : op
       ));
+      toast.success('Operación actualizada');
     } else {
       const newOperation: Operation = {
         id: `op${Date.now()}`,
         ...formData,
       };
       setOperations(prev => [...prev, newOperation]);
+      toast.success('Operación creada');
     }
     setIsDialogOpen(false);
   };
 
   const handleDeleteOperation = (id: string) => {
     setOperations(prev => prev.filter(op => op.id !== id));
+    toast.success('Operación eliminada');
   };
-
-  const getCenterName = (centerId: string) => mockCenters.find(c => c.id === centerId)?.name || centerId;
-  const getCenterColor = (centerId: string) => mockCenters.find(c => c.id === centerId)?.color || '#888';
 
   return (
     <MainLayout 
@@ -182,7 +188,7 @@ export default function OperationsPage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los centros</SelectItem>
-              {mockCenters.map((center) => (
+              {centers.map((center) => (
                 <SelectItem key={center.id} value={center.id}>
                   {center.name}
                 </SelectItem>
@@ -198,7 +204,7 @@ export default function OperationsPage() {
 
       {/* Operations Grid by Center */}
       <div className="space-y-4">
-        {(selectedCenter === 'all' ? mockCenters : mockCenters.filter(c => c.id === selectedCenter)).map((center) => (
+        {(selectedCenter === 'all' ? centers : centers.filter(c => c.id === selectedCenter)).map((center) => (
           <Card key={center.id}>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -306,13 +312,13 @@ export default function OperationsPage() {
           <div className="grid gap-4 py-4">
             <div className="grid grid-cols-2 gap-4">
               <div className="space-y-2">
-                <Label>Centro</Label>
+                <Label>Centro *</Label>
                 <Select value={formData.centerId} onValueChange={(v) => setFormData(prev => ({ ...prev, centerId: v }))}>
                   <SelectTrigger>
                     <SelectValue placeholder="Seleccionar centro" />
                   </SelectTrigger>
                   <SelectContent>
-                    {mockCenters.map((center) => (
+                    {centers.map((center) => (
                       <SelectItem key={center.id} value={center.id}>
                         {center.name}
                       </SelectItem>
@@ -321,7 +327,7 @@ export default function OperationsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Fecha</Label>
+                <Label>Fecha *</Label>
                 <Input 
                   type="date" 
                   value={formData.date}
@@ -344,7 +350,7 @@ export default function OperationsPage() {
                 </Select>
               </div>
               <div className="space-y-2">
-                <Label>Quirófano</Label>
+                <Label>Quirófano *</Label>
                 <Input 
                   placeholder="Ej: Q1"
                   value={formData.operatingRoom}

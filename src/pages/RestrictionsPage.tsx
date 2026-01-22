@@ -16,13 +16,13 @@ import {
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Search, Building2, AlertCircle, X, Plus, Edit } from 'lucide-react';
-import { mockTeamMembers, mockCenters } from '@/data/mockData';
 import { TeamMember } from '@/types';
 import { cn } from '@/lib/utils';
+import { useData } from '@/context/DataContext';
 
 export default function RestrictionsPage() {
+  const { teamMembers, setTeamMembers, centers } = useData();
   const [searchTerm, setSearchTerm] = useState('');
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editType, setEditType] = useState<'centers' | 'members'>('centers');
@@ -38,8 +38,8 @@ export default function RestrictionsPage() {
   const membersWithCenterRestrictions = filteredMembers.filter(m => m.excludedCenters.length > 0);
   const membersWithIncompatibilities = filteredMembers.filter(m => m.incompatibleWith.length > 0);
 
-  const getCenterName = (centerId: string) => mockCenters.find(c => c.id === centerId)?.name || centerId;
-  const getCenterColor = (centerId: string) => mockCenters.find(c => c.id === centerId)?.color || '#888';
+  const getCenterName = (centerId: string) => centers.find(c => c.id === centerId)?.name || centerId;
+  const getCenterColor = (centerId: string) => centers.find(c => c.id === centerId)?.color || '#888';
   const getMemberName = (memberId: string) => teamMembers.find(m => m.id === memberId)?.name || memberId;
 
   const handleEditRestrictions = (member: TeamMember, type: 'centers' | 'members') => {
@@ -354,7 +354,7 @@ export default function RestrictionsPage() {
               <div className="space-y-3">
                 <Label>Selecciona los centros a los que NO puede ir:</Label>
                 <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                  {mockCenters.map((center) => (
+                  {centers.map((center) => (
                     <div 
                       key={center.id}
                       className="flex items-center gap-3 p-2 rounded-lg border hover:bg-secondary/50 cursor-pointer"

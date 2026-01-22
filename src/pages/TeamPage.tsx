@@ -13,11 +13,14 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { Plus, Search, Mail, Phone, AlertCircle, Building2, Edit } from 'lucide-react';
+import { Plus, Search, Mail, Phone, AlertCircle, Building2, Edit, Trash2 } from 'lucide-react';
 import { mockTeamMembers, mockCenters } from '@/data/mockData';
 import { TeamMember } from '@/types';
 import { cn } from '@/lib/utils';
 import { EditRestrictionsDialog } from '@/components/team/EditRestrictionsDialog';
+import { AddEditMemberDialog } from '@/components/team/AddEditMemberDialog';
+import { DeleteMemberDialog } from '@/components/team/DeleteMemberDialog';
+import { toast } from 'sonner';
 
 export default function TeamPage() {
   const [searchTerm, setSearchTerm] = useState('');
@@ -25,6 +28,10 @@ export default function TeamPage() {
   const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [isRestrictionsDialogOpen, setIsRestrictionsDialogOpen] = useState(false);
+  const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
+  const [memberToEdit, setMemberToEdit] = useState<TeamMember | null>(null);
+  const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
+  const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null);
 
   const filteredMembers = teamMembers.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -50,7 +57,6 @@ export default function TeamPage() {
       if (m.id === memberId) {
         return { ...m, excludedCenters, incompatibleWith };
       }
-      // Sincronizar incompatibilidades bidireccionales
       const wasIncompatible = teamMembers.find(tm => tm.id === memberId)?.incompatibleWith.includes(m.id);
       const isNowIncompatible = incompatibleWith.includes(m.id);
       
@@ -64,6 +70,49 @@ export default function TeamPage() {
     }));
   };
 
+  const handleAddMember = () => {
+    setMemberToEdit(null);
+    setIsAddEditDialogOpen(true);
+  };
+
+  const handleEditMember = (member: TeamMember) => {
+    setMemberToEdit(member);
+    setIsAddEditDialogOpen(true);
+  };
+
+  const handleSaveMember = (memberData: Omit<TeamMember, 'id'> & { id?: string }) => {
+    if (memberData.id) {
+      // Editar existente
+      setTeamMembers(prev => prev.map(m => 
+        m.id === memberData.id ? { ...m, ...memberData } as TeamMember : m
+      ));
+      toast.success('Miembro actualizado correctamente');
+    } else {
+      // Añadir nuevo
+      const newMember: TeamMember = {
+        ...memberData,
+        id: `m${Date.now()}`,
+      } as TeamMember;
+      setTeamMembers(prev => [...prev, newMember]);
+      toast.success('Miembro añadido correctamente');
+    }
+  };
+
+  const handleDeleteClick = (member: TeamMember) => {
+    setMemberToDelete(member);
+    setIsDeleteDialogOpen(true);
+  };
+
+  const handleConfirmDelete = (memberId: string) => {
+    setTeamMembers(prev => prev.filter(m => m.id !== memberId));
+    // También quitar de incompatibilidades de otros
+    setTeamMembers(prev => prev.map(m => ({
+      ...m,
+      incompatibleWith: m.incompatibleWith.filter(id => id !== memberId)
+    })));
+    toast.success('Miembro eliminado correctamente');
+  };
+
   return (
     <MainLayout title="Equipo" subtitle="Gestión de anestesistas y enfermeros">
       <Card>
@@ -71,7 +120,7 @@ export default function TeamPage() {
           <div className="flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
             <CardTitle>Miembros del Equipo</CardTitle>
             <div className="flex gap-2">
-              <Button variant="outline" size="sm">
+              <Button onClick={handleAddMember}>
                 <Plus className="mr-2 h-4 w-4" />
                 Añadir Miembro
               </Button>
@@ -124,7 +173,7 @@ export default function TeamPage() {
                   <TableHead>Contacto</TableHead>
                   <TableHead>Restricciones</TableHead>
                   <TableHead>Incompatibilidades</TableHead>
-                  <TableHead className="w-[80px]">Acciones</TableHead>
+                  <TableHead className="w-[120px]">Acciones</TableHead>
                 </TableRow>
               </TableHeader>
               <TableBody>
@@ -193,13 +242,33 @@ export default function TeamPage() {
                       )}
                     </TableCell>
                     <TableCell>
-                      <Button 
-                        variant="ghost" 
-                        size="sm"
-                        onClick={() => handleEditRestrictions(member)}
-                      >
-                        <Edit className="h-4 w-4" />
-                      </Button>
+                      <div className="flex gap-1">
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleEditMember(member)}
+                          title="Editar datos"
+                        >
+                          <Edit className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleEditRestrictions(member)}
+                          title="Editar restricciones"
+                        >
+                          <Building2 className="h-4 w-4" />
+                        </Button>
+                        <Button 
+                          variant="ghost" 
+                          size="sm"
+                          onClick={() => handleDeleteClick(member)}
+                          className="text-destructive hover:text-destructive"
+                          title="Eliminar"
+                        >
+                          <Trash2 className="h-4 w-4" />
+                        </Button>
+                      </div>
                     </TableCell>
                   </TableRow>
                 ))}
@@ -217,6 +286,22 @@ export default function TeamPage() {
         allMembers={teamMembers}
         allCenters={mockCenters}
         onSave={handleSaveRestrictions}
+      />
+
+      {/* Add/Edit Member Dialog */}
+      <AddEditMemberDialog
+        open={isAddEditDialogOpen}
+        onOpenChange={setIsAddEditDialogOpen}
+        member={memberToEdit}
+        onSave={handleSaveMember}
+      />
+
+      {/* Delete Member Dialog */}
+      <DeleteMemberDialog
+        open={isDeleteDialogOpen}
+        onOpenChange={setIsDeleteDialogOpen}
+        member={memberToDelete}
+        onConfirm={handleConfirmDelete}
       />
     </MainLayout>
   );

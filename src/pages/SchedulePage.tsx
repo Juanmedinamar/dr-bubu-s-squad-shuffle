@@ -18,7 +18,8 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wand2 } from 'lucide-react';
+import { toast } from 'sonner';
 import { DAYS_OF_WEEK, SHIFTS, Assignment } from '@/types';
 import { mockTeamMembers, mockCenters, mockAssignments, mockOperations, generateDemandSlots } from '@/data/mockData';
 import { cn } from '@/lib/utils';
@@ -114,6 +115,77 @@ export default function SchedulePage() {
     setAssignments(prev => prev.filter(a => a.id !== assignmentId));
   };
 
+  const handleAutoGenerate = () => {
+    const newAssignments: Assignment[] = [];
+    const usedMembersByDate: Record<string, Set<string>> = {};
+
+    // Para cada día y cada slot de demanda, asignar personal
+    weekDates.slice(0, 5).forEach(({ fullDate }) => {
+      if (!usedMembersByDate[fullDate]) {
+        usedMembersByDate[fullDate] = new Set();
+      }
+
+      mockCenters.forEach(center => {
+        (['morning', 'afternoon'] as const).forEach(shift => {
+          const demand = getDemandForSlot(fullDate, center.id, shift);
+          if (demand.requiredAnesthetists === 0) return;
+
+          // Buscar anestesistas disponibles
+          const availableAnesthetists = mockTeamMembers.filter(member => {
+            if (member.role !== 'anesthetist') return false;
+            if (usedMembersByDate[fullDate].has(member.id)) return false;
+            if (member.excludedCenters.includes(center.id)) return false;
+            
+            // Verificar incompatibilidades con ya asignados en este slot
+            const slotAssignments = newAssignments.filter(a => 
+              a.date === fullDate && a.centerId === center.id && a.shift === shift
+            );
+            const hasIncompatibility = slotAssignments.some(a => 
+              member.incompatibleWith.includes(a.memberId)
+            );
+            return !hasIncompatibility;
+          });
+
+          // Asignar hasta cubrir la demanda
+          const toAssign = availableAnesthetists.slice(0, demand.requiredAnesthetists);
+          toAssign.forEach(member => {
+            newAssignments.push({
+              id: `as${Date.now()}-${member.id}-${shift}`,
+              memberId: member.id,
+              centerId: center.id,
+              date: fullDate,
+              shift,
+            });
+            usedMembersByDate[fullDate].add(member.id);
+          });
+
+          // Buscar enfermeros disponibles
+          const availableNurses = mockTeamMembers.filter(member => {
+            if (member.role !== 'nurse') return false;
+            if (usedMembersByDate[fullDate].has(member.id)) return false;
+            if (member.excludedCenters.includes(center.id)) return false;
+            return true;
+          });
+
+          const nursesToAssign = availableNurses.slice(0, demand.requiredNurses);
+          nursesToAssign.forEach(member => {
+            newAssignments.push({
+              id: `as${Date.now()}-${member.id}-${shift}-n`,
+              memberId: member.id,
+              centerId: center.id,
+              date: fullDate,
+              shift,
+            });
+            usedMembersByDate[fullDate].add(member.id);
+          });
+        });
+      });
+    });
+
+    setAssignments(newAssignments);
+    toast.success(`Planificación generada: ${newAssignments.length} asignaciones`);
+  };
+
   const getCenterName = (centerId: string) => mockCenters.find(c => c.id === centerId)?.name || '';
   const getCenterColor = (centerId: string) => mockCenters.find(c => c.id === centerId)?.color || '#888';
 
@@ -165,6 +237,10 @@ export default function SchedulePage() {
               ))}
             </SelectContent>
           </Select>
+          <Button variant="outline" onClick={handleAutoGenerate}>
+            <Wand2 className="mr-2 h-4 w-4" />
+            Generar automático
+          </Button>
           <Button>
             <Save className="mr-2 h-4 w-4" />
             Guardar

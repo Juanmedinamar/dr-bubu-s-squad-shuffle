@@ -4,21 +4,21 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
 import { Plus, MapPin, Users, Edit, Trash2 } from 'lucide-react';
-import { mockCenters as initialCenters, mockTeamMembers } from '@/data/mockData';
 import { Center } from '@/types';
 import { AddEditCenterDialog } from '@/components/centers/AddEditCenterDialog';
 import { DeleteCenterDialog } from '@/components/centers/DeleteCenterDialog';
+import { useData } from '@/context/DataContext';
 import { toast } from 'sonner';
 
 export default function CentersPage() {
-  const [centers, setCenters] = useState<Center[]>(initialCenters);
+  const { centers, setCenters, teamMembers } = useData();
   const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
   const [centerToEdit, setCenterToEdit] = useState<Center | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [centerToDelete, setCenterToDelete] = useState<Center | null>(null);
 
   const getExcludedCount = (centerId: string) => {
-    return mockTeamMembers.filter(m => m.excludedCenters.includes(centerId)).length;
+    return teamMembers.filter(m => m.excludedCenters.includes(centerId)).length;
   };
 
   const handleAddCenter = () => {
@@ -33,13 +33,11 @@ export default function CentersPage() {
 
   const handleSaveCenter = (centerData: Omit<Center, 'id'> & { id?: string }) => {
     if (centerData.id) {
-      // Editar existente
       setCenters(prev => prev.map(c => 
         c.id === centerData.id ? { ...c, ...centerData } as Center : c
       ));
       toast.success('Centro actualizado correctamente');
     } else {
-      // Añadir nuevo
       const newCenter: Center = {
         ...centerData,
         id: `c${Date.now()}`,
@@ -144,7 +142,6 @@ export default function CentersPage() {
         })}
       </div>
 
-      {/* Add/Edit Center Dialog */}
       <AddEditCenterDialog
         open={isAddEditDialogOpen}
         onOpenChange={setIsAddEditDialogOpen}
@@ -152,7 +149,6 @@ export default function CentersPage() {
         onSave={handleSaveCenter}
       />
 
-      {/* Delete Center Dialog */}
       <DeleteCenterDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}

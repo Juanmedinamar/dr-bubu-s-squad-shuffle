@@ -14,18 +14,18 @@ import {
   TableRow 
 } from '@/components/ui/table';
 import { Plus, Search, Mail, Phone, AlertCircle, Building2, Edit, Trash2 } from 'lucide-react';
-import { mockTeamMembers, mockCenters } from '@/data/mockData';
 import { TeamMember } from '@/types';
 import { cn } from '@/lib/utils';
 import { EditRestrictionsDialog } from '@/components/team/EditRestrictionsDialog';
 import { AddEditMemberDialog } from '@/components/team/AddEditMemberDialog';
 import { DeleteMemberDialog } from '@/components/team/DeleteMemberDialog';
+import { useData } from '@/context/DataContext';
 import { toast } from 'sonner';
 
 export default function TeamPage() {
+  const { teamMembers, setTeamMembers, centers } = useData();
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState<'all' | 'anesthetist' | 'nurse'>('all');
-  const [teamMembers, setTeamMembers] = useState<TeamMember[]>(mockTeamMembers);
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [isRestrictionsDialogOpen, setIsRestrictionsDialogOpen] = useState(false);
   const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
@@ -40,11 +40,7 @@ export default function TeamPage() {
   });
 
   const getCenterName = (centerId: string) => {
-    return mockCenters.find(c => c.id === centerId)?.name || centerId;
-  };
-
-  const getMemberName = (memberId: string) => {
-    return teamMembers.find(m => m.id === memberId)?.name || memberId;
+    return centers.find(c => c.id === centerId)?.name || centerId;
   };
 
   const handleEditRestrictions = (member: TeamMember) => {
@@ -82,13 +78,11 @@ export default function TeamPage() {
 
   const handleSaveMember = (memberData: Omit<TeamMember, 'id'> & { id?: string }) => {
     if (memberData.id) {
-      // Editar existente
       setTeamMembers(prev => prev.map(m => 
         m.id === memberData.id ? { ...m, ...memberData } as TeamMember : m
       ));
       toast.success('Miembro actualizado correctamente');
     } else {
-      // Añadir nuevo
       const newMember: TeamMember = {
         ...memberData,
         id: `m${Date.now()}`,
@@ -104,9 +98,7 @@ export default function TeamPage() {
   };
 
   const handleConfirmDelete = (memberId: string) => {
-    setTeamMembers(prev => prev.filter(m => m.id !== memberId));
-    // También quitar de incompatibilidades de otros
-    setTeamMembers(prev => prev.map(m => ({
+    setTeamMembers(prev => prev.filter(m => m.id !== memberId).map(m => ({
       ...m,
       incompatibleWith: m.incompatibleWith.filter(id => id !== memberId)
     })));
@@ -127,7 +119,6 @@ export default function TeamPage() {
             </div>
           </div>
           
-          {/* Filters */}
           <div className="flex flex-col gap-3 sm:flex-row mt-4">
             <div className="relative flex-1">
               <Search className="absolute left-3 top-1/2 h-4 w-4 -translate-y-1/2 text-muted-foreground" />
@@ -278,17 +269,15 @@ export default function TeamPage() {
         </CardContent>
       </Card>
 
-      {/* Edit Restrictions Dialog */}
       <EditRestrictionsDialog
         open={isRestrictionsDialogOpen}
         onOpenChange={setIsRestrictionsDialogOpen}
         member={editingMember}
         allMembers={teamMembers}
-        allCenters={mockCenters}
+        allCenters={centers}
         onSave={handleSaveRestrictions}
       />
 
-      {/* Add/Edit Member Dialog */}
       <AddEditMemberDialog
         open={isAddEditDialogOpen}
         onOpenChange={setIsAddEditDialogOpen}
@@ -296,7 +285,6 @@ export default function TeamPage() {
         onSave={handleSaveMember}
       />
 
-      {/* Delete Member Dialog */}
       <DeleteMemberDialog
         open={isDeleteDialogOpen}
         onOpenChange={setIsDeleteDialogOpen}

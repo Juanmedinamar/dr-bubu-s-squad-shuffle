@@ -19,15 +19,16 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wand2 } from 'lucide-react';
-import { toast } from 'sonner';
 import { DAYS_OF_WEEK, SHIFTS, Assignment } from '@/types';
-import { mockTeamMembers, mockCenters, mockAssignments, mockOperations, generateDemandSlots } from '@/data/mockData';
 import { cn } from '@/lib/utils';
+import { useData } from '@/context/DataContext';
+import { generateDemandSlots } from '@/data/mockData';
+import { toast } from 'sonner';
 
 export default function SchedulePage() {
+  const { teamMembers, centers, assignments, setAssignments, operations } = useData();
   const [selectedCenter, setSelectedCenter] = useState<string>('all');
   const [weekOffset, setWeekOffset] = useState(0);
-  const [assignments, setAssignments] = useState<Assignment[]>(mockAssignments);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
   const [selectedSlot, setSelectedSlot] = useState<{
     centerId: string;
@@ -35,7 +36,7 @@ export default function SchedulePage() {
     shift: 'morning' | 'afternoon';
   } | null>(null);
 
-  const demandSlots = generateDemandSlots(mockOperations);
+  const demandSlots = generateDemandSlots(operations);
 
   const getWeekDates = () => {
     const today = new Date();
@@ -77,12 +78,9 @@ export default function SchedulePage() {
     const existingAssignments = assignments.filter(a => a.date === date);
     const assignedMemberIds = existingAssignments.map(a => a.memberId);
     
-    return mockTeamMembers.filter(member => {
-      // No asignado ya ese día
+    return teamMembers.filter(member => {
       const isAlreadyAssigned = assignedMemberIds.includes(member.id);
-      // No tiene el centro excluido
       const hasExcludedCenter = member.excludedCenters.includes(centerId);
-      // No es incompatible con alguien ya asignado al mismo slot
       const slotAssignments = getAssignmentsForSlot(date, centerId, shift);
       const hasIncompatibility = slotAssignments.some(a => 
         member.incompatibleWith.includes(a.memberId)
@@ -119,24 +117,21 @@ export default function SchedulePage() {
     const newAssignments: Assignment[] = [];
     const usedMembersByDate: Record<string, Set<string>> = {};
 
-    // Para cada día y cada slot de demanda, asignar personal
     weekDates.slice(0, 5).forEach(({ fullDate }) => {
       if (!usedMembersByDate[fullDate]) {
         usedMembersByDate[fullDate] = new Set();
       }
 
-      mockCenters.forEach(center => {
+      centers.forEach(center => {
         (['morning', 'afternoon'] as const).forEach(shift => {
           const demand = getDemandForSlot(fullDate, center.id, shift);
           if (demand.requiredAnesthetists === 0) return;
 
-          // Buscar anestesistas disponibles
-          const availableAnesthetists = mockTeamMembers.filter(member => {
+          const availableAnesthetists = teamMembers.filter(member => {
             if (member.role !== 'anesthetist') return false;
             if (usedMembersByDate[fullDate].has(member.id)) return false;
             if (member.excludedCenters.includes(center.id)) return false;
             
-            // Verificar incompatibilidades con ya asignados en este slot
             const slotAssignments = newAssignments.filter(a => 
               a.date === fullDate && a.centerId === center.id && a.shift === shift
             );
@@ -146,7 +141,6 @@ export default function SchedulePage() {
             return !hasIncompatibility;
           });
 
-          // Asignar hasta cubrir la demanda
           const toAssign = availableAnesthetists.slice(0, demand.requiredAnesthetists);
           toAssign.forEach(member => {
             newAssignments.push({
@@ -159,8 +153,7 @@ export default function SchedulePage() {
             usedMembersByDate[fullDate].add(member.id);
           });
 
-          // Buscar enfermeros disponibles
-          const availableNurses = mockTeamMembers.filter(member => {
+          const availableNurses = teamMembers.filter(member => {
             if (member.role !== 'nurse') return false;
             if (usedMembersByDate[fullDate].has(member.id)) return false;
             if (member.excludedCenters.includes(center.id)) return false;
@@ -182,12 +175,16 @@ export default function SchedulePage() {
       });
     });
 
+    if (newAssignments.length === 0) {
+      toast.error('No hay operaciones programadas para esta semana');
+      return;
+    }
+
     setAssignments(newAssignments);
     toast.success(`Planificación generada: ${newAssignments.length} asignaciones`);
   };
 
-  const getCenterName = (centerId: string) => mockCenters.find(c => c.id === centerId)?.name || '';
-  const getCenterColor = (centerId: string) => mockCenters.find(c => c.id === centerId)?.color || '#888';
+  const getCenterName = (centerId: string) => centers.find(c => c.id === centerId)?.name || '';
 
   return (
     <MainLayout 
@@ -230,7 +227,7 @@ export default function SchedulePage() {
             </SelectTrigger>
             <SelectContent>
               <SelectItem value="all">Todos los centros</SelectItem>
-              {mockCenters.map((center) => (
+              {centers.map((center) => (
                 <SelectItem key={center.id} value={center.id}>
                   {center.name}
                 </SelectItem>
@@ -250,7 +247,7 @@ export default function SchedulePage() {
 
       {/* Schedule Grid by Center with Shifts */}
       <div className="space-y-4">
-        {(selectedCenter === 'all' ? mockCenters : mockCenters.filter(c => c.id === selectedCenter)).map((center) => (
+        {(selectedCenter === 'all' ? centers : centers.filter(c => c.id === selectedCenter)).map((center) => (
           <Card key={center.id}>
             <CardHeader className="pb-3">
               <CardTitle className="flex items-center gap-2 text-lg">
@@ -291,7 +288,7 @@ export default function SchedulePage() {
                           const slotAssignments = getAssignmentsForSlot(fullDate, center.id, shift);
                           const demand = getDemandForSlot(fullDate, center.id, shift);
                           const assignedAnesthetists = slotAssignments.filter(a => 
-                            mockTeamMembers.find(m => m.id === a.memberId)?.role === 'anesthetist'
+                            teamMembers.find(m => m.id === a.memberId)?.role === 'anesthetist'
                           ).length;
                           const isCovered = assignedAnesthetists >= demand.requiredAnesthetists;
                           
@@ -329,7 +326,7 @@ export default function SchedulePage() {
                                 {/* Assignments */}
                                 <div className="space-y-1">
                                   {slotAssignments.map((assignment) => {
-                                    const member = mockTeamMembers.find(m => m.id === assignment.memberId);
+                                    const member = teamMembers.find(m => m.id === assignment.memberId);
                                     if (!member) return null;
                                     
                                     return (
@@ -400,7 +397,7 @@ export default function SchedulePage() {
                     <h4 className="text-sm font-medium mb-2">Asignados actualmente:</h4>
                     <div className="space-y-2">
                       {getAssignmentsForSlot(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map((assignment) => {
-                        const member = mockTeamMembers.find(m => m.id === assignment.memberId);
+                        const member = teamMembers.find(m => m.id === assignment.memberId);
                         if (!member) return null;
                         
                         return (

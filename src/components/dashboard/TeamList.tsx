@@ -1,12 +1,14 @@
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
-import { mockTeamMembers } from '@/data/mockData';
 import { cn } from '@/lib/utils';
+import { useData } from '@/context/DataContext';
 
 export function TeamList() {
-  const anesthetists = mockTeamMembers.filter(m => m.role === 'anesthetist').slice(0, 5);
-  const nurses = mockTeamMembers.filter(m => m.role === 'nurse');
+  const { teamMembers } = useData();
+  
+  const anesthetists = teamMembers.filter(m => m.role === 'anesthetist').slice(0, 5);
+  const nurses = teamMembers.filter(m => m.role === 'nurse');
 
   return (
     <Card className="animate-fade-in">

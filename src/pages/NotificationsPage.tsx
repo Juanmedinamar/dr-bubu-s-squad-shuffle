@@ -2,7 +2,6 @@ import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle, CardDescription } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
-import { Badge } from '@/components/ui/badge';
 import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
@@ -13,13 +12,16 @@ import {
   Send, 
   CheckCircle2, 
   Users,
-  FileText
+  FileText,
+  ExternalLink
 } from 'lucide-react';
-import { mockTeamMembers } from '@/data/mockData';
+import { useData } from '@/context/DataContext';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function NotificationsPage() {
+  const { teamMembers } = useData();
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [message, setMessage] = useState('');
   const [sending, setSending] = useState(false);
@@ -33,14 +35,16 @@ export default function NotificationsPage() {
   };
 
   const selectAll = () => {
-    if (selectedMembers.length === mockTeamMembers.length) {
+    if (selectedMembers.length === teamMembers.length) {
       setSelectedMembers([]);
     } else {
-      setSelectedMembers(mockTeamMembers.map(m => m.id));
+      setSelectedMembers(teamMembers.map(m => m.id));
     }
   };
 
-  const handleSend = async (method: 'email' | 'whatsapp') => {
+  const getMessageContent = () => message || defaultMessage;
+
+  const handleSendEmail = async () => {
     if (selectedMembers.length === 0) {
       toast.error('Selecciona al menos un miembro del equipo');
       return;
@@ -48,13 +52,72 @@ export default function NotificationsPage() {
 
     setSending(true);
     
-    // Simulate sending
-    await new Promise(resolve => setTimeout(resolve, 1500));
+    try {
+      const recipients = selectedMembers
+        .map(id => teamMembers.find(m => m.id === id))
+        .filter(m => m && m.email)
+        .map(m => ({ name: m!.name, email: m!.email! }));
+
+      if (recipients.length === 0) {
+        toast.error('Ninguno de los miembros seleccionados tiene email');
+        setSending(false);
+        return;
+      }
+
+      const { data, error } = await supabase.functions.invoke('send-notification-email', {
+        body: {
+          recipients,
+          subject: 'Planificación semanal - Dr. Bubu',
+          message: getMessageContent(),
+        },
+      });
+
+      if (error) throw error;
+
+      toast.success(`Email enviado a ${data.sent} personas`);
+      if (data.failed > 0) {
+        toast.warning(`${data.failed} emails fallaron`);
+      }
+      setSelectedMembers([]);
+      setMessage('');
+    } catch (error: any) {
+      console.error('Error sending email:', error);
+      toast.error('Error al enviar emails: ' + error.message);
+    } finally {
+      setSending(false);
+    }
+  };
+
+  const handleSendWhatsApp = () => {
+    if (selectedMembers.length === 0) {
+      toast.error('Selecciona al menos un miembro del equipo');
+      return;
+    }
+
+    const membersWithPhone = selectedMembers
+      .map(id => teamMembers.find(m => m.id === id))
+      .filter(m => m && m.phone);
+
+    if (membersWithPhone.length === 0) {
+      toast.error('Ninguno de los miembros seleccionados tiene teléfono');
+      return;
+    }
+
+    // Open WhatsApp Web for each member
+    const messageText = encodeURIComponent(getMessageContent());
     
-    setSending(false);
-    toast.success(
-      `Notificación enviada por ${method === 'email' ? 'email' : 'WhatsApp'} a ${selectedMembers.length} personas`
-    );
+    membersWithPhone.forEach((member, index) => {
+      // Clean phone number (remove spaces, dashes, etc.)
+      const phone = member!.phone!.replace(/[^\d+]/g, '').replace('+', '');
+      const whatsappUrl = `https://wa.me/${phone}?text=${messageText}`;
+      
+      // Stagger opening to avoid popup blockers
+      setTimeout(() => {
+        window.open(whatsappUrl, '_blank');
+      }, index * 500);
+    });
+
+    toast.success(`Abriendo WhatsApp para ${membersWithPhone.length} personas`);
     setSelectedMembers([]);
     setMessage('');
   };
@@ -119,10 +182,10 @@ Equipo del Dr. Bubu`;
                   <div className="rounded-lg border border-border bg-secondary/30 p-4">
                     <h4 className="font-medium mb-2">Envío por Email</h4>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Se enviará un email a cada miembro seleccionado con el mensaje y la planificación adjunta en formato PDF.
+                      Se enviará un email a cada miembro seleccionado con el mensaje personalizado.
                     </p>
                     <Button 
-                      onClick={() => handleSend('email')} 
+                      onClick={handleSendEmail} 
                       disabled={sending || selectedMembers.length === 0}
                       className="w-full"
                     >
@@ -141,22 +204,16 @@ Equipo del Dr. Bubu`;
                   <div className="rounded-lg border border-border bg-secondary/30 p-4">
                     <h4 className="font-medium mb-2">Envío por WhatsApp</h4>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Se abrirá WhatsApp Web para enviar el mensaje a cada miembro seleccionado de forma individual.
+                      Se abrirá WhatsApp Web para enviar el mensaje a cada miembro seleccionado.
                     </p>
                     <Button 
-                      onClick={() => handleSend('whatsapp')} 
-                      disabled={sending || selectedMembers.length === 0}
+                      onClick={handleSendWhatsApp} 
+                      disabled={selectedMembers.length === 0}
                       variant="outline"
                       className="w-full border-green-500 text-green-600 hover:bg-green-50"
                     >
-                      {sending ? (
-                        <>Enviando...</>
-                      ) : (
-                        <>
-                          <MessageSquare className="mr-2 h-4 w-4" />
-                          Enviar por WhatsApp ({selectedMembers.length} seleccionados)
-                        </>
-                      )}
+                      <ExternalLink className="mr-2 h-4 w-4" />
+                      Abrir WhatsApp ({selectedMembers.length} seleccionados)
                     </Button>
                   </div>
                 </TabsContent>
@@ -171,19 +228,19 @@ Equipo del Dr. Bubu`;
             <div className="flex items-center justify-between">
               <CardTitle>Destinatarios</CardTitle>
               <Button variant="ghost" size="sm" onClick={selectAll}>
-                {selectedMembers.length === mockTeamMembers.length ? 'Deseleccionar' : 'Seleccionar todos'}
+                {selectedMembers.length === teamMembers.length ? 'Deseleccionar' : 'Seleccionar todos'}
               </Button>
             </div>
             <div className="flex items-center gap-2 text-sm">
               <Users className="h-4 w-4 text-muted-foreground" />
               <span className="text-muted-foreground">
-                {selectedMembers.length} de {mockTeamMembers.length} seleccionados
+                {selectedMembers.length} de {teamMembers.length} seleccionados
               </span>
             </div>
           </CardHeader>
           <CardContent>
             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
-              {mockTeamMembers.map((member) => {
+              {teamMembers.map((member) => {
                 const isSelected = selectedMembers.includes(member.id);
                 
                 return (

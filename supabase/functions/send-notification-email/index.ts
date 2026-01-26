@@ -8,13 +8,15 @@ const corsHeaders = {
   "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
 };
 
+interface Recipient {
+  name: string;
+  email: string;
+  message: string; // Personalized message per recipient
+}
+
 interface NotificationRequest {
-  recipients: {
-    name: string;
-    email: string;
-  }[];
+  recipients: Recipient[];
   subject: string;
-  message: string;
 }
 
 const handler = async (req: Request): Promise<Response> => {
@@ -26,7 +28,7 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { recipients, subject, message }: NotificationRequest = await req.json();
+    const { recipients, subject }: NotificationRequest = await req.json();
     
     console.log(`Sending email to ${recipients.length} recipients`);
 
@@ -35,8 +37,8 @@ const handler = async (req: Request): Promise<Response> => {
       throw new Error("No recipients provided");
     }
 
-    if (!subject || !message) {
-      throw new Error("Subject and message are required");
+    if (!subject) {
+      throw new Error("Subject is required");
     }
 
     const results = [];
@@ -51,19 +53,23 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       try {
+        // Convert message to HTML (preserve line breaks and formatting)
+        const htmlMessage = recipient.message
+          .replace(/\n/g, '<br>')
+          .replace(/\*([^*]+)\*/g, '<strong>$1</strong>'); // Bold markdown
+
         const emailResponse = await resend.emails.send({
           from: "Dr. Bubu <onboarding@resend.dev>", // Use verified domain in production
           to: [recipient.email],
           subject: subject,
           html: `
-            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto;">
-              <h2 style="color: #333;">Hola ${recipient.name},</h2>
-              <div style="white-space: pre-wrap; color: #555; line-height: 1.6;">
-${message}
+            <div style="font-family: Arial, sans-serif; max-width: 600px; margin: 0 auto; padding: 20px;">
+              <div style="color: #333; line-height: 1.6;">
+                ${htmlMessage}
               </div>
               <hr style="border: none; border-top: 1px solid #eee; margin: 20px 0;" />
               <p style="color: #888; font-size: 12px;">
-                Este es un mensaje automático del sistema de planificación.
+                Este es un mensaje automático del sistema de planificación Dr. Bubu.
               </p>
             </div>
           `,

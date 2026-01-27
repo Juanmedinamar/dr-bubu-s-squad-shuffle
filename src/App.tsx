@@ -11,6 +11,7 @@ import SchedulePage from "./pages/SchedulePage";
 import OperationsPage from "./pages/OperationsPage";
 import RestrictionsPage from "./pages/RestrictionsPage";
 import NotificationsPage from "./pages/NotificationsPage";
+import MonthlySummaryPage from "./pages/MonthlySummaryPage";
 import NotFound from "./pages/NotFound";
 
 const queryClient = new QueryClient();
@@ -30,6 +31,7 @@ const App = () => (
             <Route path="/schedule" element={<SchedulePage />} />
             <Route path="/restrictions" element={<RestrictionsPage />} />
             <Route path="/notifications" element={<NotificationsPage />} />
+            <Route path="/monthly-summary" element={<MonthlySummaryPage />} />
             {/* ADD ALL CUSTOM ROUTES ABOVE THE CATCH-ALL "*" ROUTE */}
             <Route path="*" element={<NotFound />} />
           </Routes>

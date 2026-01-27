@@ -7,7 +7,8 @@ import {
   Send,
   Stethoscope,
   Scissors,
-  ShieldAlert
+  ShieldAlert,
+  BarChart3
 } from 'lucide-react';
 import { cn } from '@/lib/utils';
 
@@ -19,6 +20,7 @@ const navItems = [
   { icon: Calendar, label: 'Planificación', path: '/schedule' },
   { icon: ShieldAlert, label: 'Restricciones', path: '/restrictions' },
   { icon: Send, label: 'Notificaciones', path: '/notifications' },
+  { icon: BarChart3, label: 'Resumen Mensual', path: '/monthly-summary' },
 ];
 
 export function Sidebar() {

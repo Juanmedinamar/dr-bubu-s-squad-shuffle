@@ -14,7 +14,206 @@ export type Database = {
   }
   public: {
     Tables: {
-      [_ in never]: never
+      assignments: {
+        Row: {
+          center_id: string | null
+          created_at: string
+          date: string
+          id: string
+          member_id: string | null
+          shift: string
+        }
+        Insert: {
+          center_id?: string | null
+          created_at?: string
+          date: string
+          id?: string
+          member_id?: string | null
+          shift: string
+        }
+        Update: {
+          center_id?: string | null
+          created_at?: string
+          date?: string
+          id?: string
+          member_id?: string | null
+          shift?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "assignments_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "assignments_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      centers: {
+        Row: {
+          address: string | null
+          color: string
+          created_at: string
+          id: string
+          name: string
+          updated_at: string
+        }
+        Insert: {
+          address?: string | null
+          color?: string
+          created_at?: string
+          id?: string
+          name: string
+          updated_at?: string
+        }
+        Update: {
+          address?: string | null
+          color?: string
+          created_at?: string
+          id?: string
+          name?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
+      operation_assignments: {
+        Row: {
+          created_at: string
+          id: string
+          member_id: string | null
+          operation_id: string | null
+          role_in_operation: string
+        }
+        Insert: {
+          created_at?: string
+          id?: string
+          member_id?: string | null
+          operation_id?: string | null
+          role_in_operation: string
+        }
+        Update: {
+          created_at?: string
+          id?: string
+          member_id?: string | null
+          operation_id?: string | null
+          role_in_operation?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operation_assignments_member_id_fkey"
+            columns: ["member_id"]
+            isOneToOne: false
+            referencedRelation: "team_members"
+            referencedColumns: ["id"]
+          },
+          {
+            foreignKeyName: "operation_assignments_operation_id_fkey"
+            columns: ["operation_id"]
+            isOneToOne: false
+            referencedRelation: "operations"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      operations: {
+        Row: {
+          center_id: string | null
+          created_at: string
+          date: string
+          estimated_duration: number
+          id: string
+          notes: string | null
+          operating_room: string
+          patient_code: string | null
+          required_anesthetists: number
+          shift: string
+          specialty: string
+          type: string
+          updated_at: string
+        }
+        Insert: {
+          center_id?: string | null
+          created_at?: string
+          date: string
+          estimated_duration?: number
+          id?: string
+          notes?: string | null
+          operating_room: string
+          patient_code?: string | null
+          required_anesthetists?: number
+          shift: string
+          specialty: string
+          type: string
+          updated_at?: string
+        }
+        Update: {
+          center_id?: string | null
+          created_at?: string
+          date?: string
+          estimated_duration?: number
+          id?: string
+          notes?: string | null
+          operating_room?: string
+          patient_code?: string | null
+          required_anesthetists?: number
+          shift?: string
+          specialty?: string
+          type?: string
+          updated_at?: string
+        }
+        Relationships: [
+          {
+            foreignKeyName: "operations_center_id_fkey"
+            columns: ["center_id"]
+            isOneToOne: false
+            referencedRelation: "centers"
+            referencedColumns: ["id"]
+          },
+        ]
+      }
+      team_members: {
+        Row: {
+          created_at: string
+          email: string | null
+          excluded_centers: string[] | null
+          id: string
+          incompatible_with: string[] | null
+          name: string
+          phone: string | null
+          role: string
+          updated_at: string
+        }
+        Insert: {
+          created_at?: string
+          email?: string | null
+          excluded_centers?: string[] | null
+          id?: string
+          incompatible_with?: string[] | null
+          name: string
+          phone?: string | null
+          role: string
+          updated_at?: string
+        }
+        Update: {
+          created_at?: string
+          email?: string | null
+          excluded_centers?: string[] | null
+          id?: string
+          incompatible_with?: string[] | null
+          name?: string
+          phone?: string | null
+          role?: string
+          updated_at?: string
+        }
+        Relationships: []
+      }
     }
     Views: {
       [_ in never]: never

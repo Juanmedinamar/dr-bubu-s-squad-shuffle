@@ -1,4 +1,4 @@
-import { useState, useEffect } from 'react';
+import { useState } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,28 +18,15 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wand2, Loader2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wand2 } from 'lucide-react';
 import { DAYS_OF_WEEK, SHIFTS, Assignment } from '@/types';
 import { cn } from '@/lib/utils';
-import { useTeamMembers, useCenters, useAssignments, useOperations, useSaveAssignment, useDeleteAssignment } from '@/hooks/useDatabase';
+import { useData } from '@/context/DataContext';
 import { generateDemandSlots } from '@/data/mockData';
 import { toast } from 'sonner';
-import { supabase } from '@/integrations/supabase/client';
 
 export default function SchedulePage() {
-  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
-  const { data: centers = [], isLoading: loadingCenters } = useCenters();
-  const { data: dbAssignments = [], isLoading: loadingAssignments, refetch: refetchAssignments } = useAssignments();
-  const { data: operations = [], isLoading: loadingOperations } = useOperations();
-  
-  const saveAssignmentMutation = useSaveAssignment();
-  const deleteAssignmentMutation = useDeleteAssignment();
-  
-  // Local state for pending changes
-  const [localAssignments, setLocalAssignments] = useState<Assignment[]>([]);
-  const [pendingAdds, setPendingAdds] = useState<Assignment[]>([]);
-  const [pendingDeletes, setPendingDeletes] = useState<string[]>([]);
-  const [isSaving, setIsSaving] = useState(false);
+  const { teamMembers, centers, assignments, setAssignments, operations } = useData();
   
   const [selectedCenter, setSelectedCenter] = useState<string>('all');
   const [weekOffset, setWeekOffset] = useState(0);
@@ -49,23 +36,6 @@ export default function SchedulePage() {
     date: string;
     shift: 'morning' | 'afternoon';
   } | null>(null);
-
-  const isLoading = loadingMembers || loadingCenters || loadingAssignments || loadingOperations;
-
-  // Sync local assignments with database assignments
-  useEffect(() => {
-    if (!loadingAssignments) {
-      setLocalAssignments(dbAssignments);
-      setPendingAdds([]);
-      setPendingDeletes([]);
-    }
-  }, [dbAssignments, loadingAssignments]);
-
-  // Combined assignments (db + pending adds - pending deletes)
-  const assignments = [
-    ...localAssignments.filter(a => !pendingDeletes.includes(a.id)),
-    ...pendingAdds
-  ];
 
   const demandSlots = generateDemandSlots(operations);
 
@@ -130,58 +100,23 @@ export default function SchedulePage() {
     if (!selectedSlot) return;
     
     const newAssignment: Assignment = {
-      id: `pending-${Date.now()}`,
+      id: `as${Date.now()}`,
       memberId,
       centerId: selectedSlot.centerId,
       date: selectedSlot.date,
       shift: selectedSlot.shift,
     };
     
-    setPendingAdds(prev => [...prev, newAssignment]);
+    setAssignments(prev => [...prev, newAssignment]);
   };
 
   const handleRemoveAssignment = (assignmentId: string) => {
-    // Check if it's a pending add
-    if (assignmentId.startsWith('pending-')) {
-      setPendingAdds(prev => prev.filter(a => a.id !== assignmentId));
-    } else {
-      // Mark existing assignment for deletion
-      setPendingDeletes(prev => [...prev, assignmentId]);
-    }
+    setAssignments(prev => prev.filter(a => a.id !== assignmentId));
   };
 
-  const handleSave = async () => {
-    setIsSaving(true);
-    try {
-      // Delete assignments
-      for (const id of pendingDeletes) {
-        await supabase.from('assignments').delete().eq('id', id);
-      }
-      
-      // Add new assignments
-      for (const assignment of pendingAdds) {
-        await supabase.from('assignments').insert({
-          member_id: assignment.memberId,
-          center_id: assignment.centerId,
-          date: assignment.date,
-          shift: assignment.shift,
-        });
-      }
-      
-      // Refresh data
-      await refetchAssignments();
-      setPendingAdds([]);
-      setPendingDeletes([]);
-      toast.success('Planificación guardada correctamente');
-    } catch (error) {
-      console.error('Error saving assignments:', error);
-      toast.error('Error al guardar la planificación');
-    } finally {
-      setIsSaving(false);
-    }
+  const handleSave = () => {
+    toast.success('Planificación guardada correctamente');
   };
-
-  const hasChanges = pendingAdds.length > 0 || pendingDeletes.length > 0;
 
   const handleAutoGenerate = () => {
     const newAssignments: Assignment[] = [];
@@ -250,26 +185,11 @@ export default function SchedulePage() {
       return;
     }
 
-    // Clear pending changes and set new ones
-    setPendingDeletes(localAssignments.map(a => a.id));
-    setPendingAdds(newAssignments);
-    toast.success(`Planificación generada: ${newAssignments.length} asignaciones. Pulsa Guardar para confirmar.`);
+    setAssignments(newAssignments);
+    toast.success(`Planificación generada: ${newAssignments.length} asignaciones`);
   };
 
   const getCenterName = (centerId: string) => centers.find(c => c.id === centerId)?.name || '';
-
-  if (isLoading) {
-    return (
-      <MainLayout 
-        title="Planificación" 
-        subtitle="Asignación de turnos semanales por demanda"
-      >
-        <div className="flex items-center justify-center h-64">
-          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
-        </div>
-      </MainLayout>
-    );
-  }
 
   return (
     <MainLayout 
@@ -319,17 +239,13 @@ export default function SchedulePage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={handleAutoGenerate} disabled={isSaving}>
+          <Button variant="outline" onClick={handleAutoGenerate}>
             <Wand2 className="mr-2 h-4 w-4" />
             Generar automático
           </Button>
-          <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
-            {isSaving ? (
-              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-            ) : (
-              <Save className="mr-2 h-4 w-4" />
-            )}
-            Guardar {hasChanges && `(${pendingAdds.length + pendingDeletes.length})`}
+          <Button onClick={handleSave}>
+            <Save className="mr-2 h-4 w-4" />
+            Guardar
           </Button>
         </div>
       </div>
@@ -431,21 +347,23 @@ export default function SchedulePage() {
                                       >
                                         <div className="flex items-center gap-1.5 truncate">
                                           <Avatar className="h-5 w-5">
-                                            <AvatarFallback className={cn(
-                                              'text-[10px] text-white',
-                                              member.role === 'anesthetist' ? 'bg-anesthetist' : 'bg-nurse'
-                                            )}>
-                                              {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
+                                            <AvatarFallback className="text-[10px]">
+                                              {member.name.split(' ').map(n => n[0]).join('')}
                                             </AvatarFallback>
                                           </Avatar>
-                                          <span className="font-medium truncate">{member.name}</span>
+                                          <span className="truncate">{member.name}</span>
                                         </div>
-                                        <button 
-                                          className="opacity-0 group-hover:opacity-100 hover:bg-secondary rounded p-0.5 transition-opacity"
-                                          onClick={() => handleRemoveAssignment(assignment.id)}
+                                        <Button
+                                          variant="ghost"
+                                          size="icon"
+                                          className="h-4 w-4 opacity-0 group-hover:opacity-100"
+                                          onClick={(e) => {
+                                            e.stopPropagation();
+                                            handleRemoveAssignment(assignment.id);
+                                          }}
                                         >
                                           <X className="h-3 w-3" />
-                                        </button>
+                                        </Button>
                                       </div>
                                     );
                                   })}
@@ -469,115 +387,84 @@ export default function SchedulePage() {
         <DialogContent className="max-w-md">
           <DialogHeader>
             <DialogTitle>
-              Asignar personal
+              Asignar personal - {selectedSlot && getCenterName(selectedSlot.centerId)}
             </DialogTitle>
-            {selectedSlot && (
-              <div className="text-sm text-muted-foreground">
-                {getCenterName(selectedSlot.centerId)} - {selectedSlot.date} - {SHIFTS[selectedSlot.shift]}
-              </div>
-            )}
           </DialogHeader>
-          <div className="py-4">
-            {selectedSlot && (
-              <>
-                {/* Current assignments */}
-                {getAssignmentsForSlot(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).length > 0 && (
-                  <div className="mb-4">
-                    <h4 className="text-sm font-medium mb-2">Asignados actualmente:</h4>
-                    <div className="space-y-2">
-                      {getAssignmentsForSlot(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map((assignment) => {
-                        const member = teamMembers.find(m => m.id === assignment.memberId);
-                        if (!member) return null;
-                        
-                        return (
-                          <div 
-                            key={assignment.id}
-                            className="flex items-center justify-between p-2 rounded-lg border"
-                          >
-                            <div className="flex items-center gap-2">
-                              <Avatar className="h-7 w-7">
-                                <AvatarFallback className={cn(
-                                  'text-xs text-white',
-                                  member.role === 'anesthetist' ? 'bg-anesthetist' : 'bg-nurse'
-                                )}>
-                                  {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                                </AvatarFallback>
-                              </Avatar>
-                              <span className="font-medium">{member.name}</span>
-                              <Badge 
-                                variant="secondary" 
-                                className={cn(
-                                  'text-xs border-0',
-                                  member.role === 'anesthetist' 
-                                    ? 'bg-anesthetist-light text-anesthetist' 
-                                    : 'bg-nurse-light text-nurse'
-                                )}
-                              >
-                                {member.role === 'anesthetist' ? 'Anestesista' : 'Enfermero'}
-                              </Badge>
-                            </div>
-                            <Button 
-                              variant="ghost" 
-                              size="sm"
-                              className="text-destructive hover:text-destructive"
-                              onClick={() => handleRemoveAssignment(assignment.id)}
-                            >
-                              <X className="h-4 w-4" />
-                            </Button>
-                          </div>
-                        );
-                      })}
-                    </div>
-                  </div>
-                )}
+          
+          {selectedSlot && (
+            <div className="space-y-4">
+              <div className="text-sm text-muted-foreground">
+                {selectedSlot.date} - {SHIFTS[selectedSlot.shift]}
+              </div>
 
-                {/* Available members */}
+              {/* Current assignments */}
+              {getAssignmentsForSlot(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).length > 0 && (
                 <div>
-                  <h4 className="text-sm font-medium mb-2">Personal disponible:</h4>
-                  <div className="space-y-2 max-h-[300px] overflow-y-auto">
-                    {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map((member) => (
-                      <div 
-                        key={member.id}
-                        className="flex items-center justify-between p-2 rounded-lg border hover:bg-secondary/50 cursor-pointer transition-colors"
-                        onClick={() => handleAssignMember(member.id)}
-                      >
-                        <div className="flex items-center gap-2">
-                          <Avatar className="h-7 w-7">
-                            <AvatarFallback className={cn(
-                              'text-xs text-white',
-                              member.role === 'anesthetist' ? 'bg-anesthetist' : 'bg-nurse'
-                            )}>
-                              {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                            </AvatarFallback>
-                          </Avatar>
-                          <span className="font-medium">{member.name}</span>
-                          <Badge 
-                            variant="secondary" 
-                            className={cn(
-                              'text-xs border-0',
-                              member.role === 'anesthetist' 
-                                ? 'bg-anesthetist-light text-anesthetist' 
-                                : 'bg-nurse-light text-nurse'
-                            )}
+                  <p className="text-sm font-medium mb-2">Asignados:</p>
+                  <div className="space-y-1">
+                    {getAssignmentsForSlot(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map(a => {
+                      const member = teamMembers.find(m => m.id === a.memberId);
+                      if (!member) return null;
+                      return (
+                        <div key={a.id} className="flex items-center justify-between p-2 rounded bg-secondary">
+                          <span className="text-sm">{member.name}</span>
+                          <Button
+                            variant="ghost"
+                            size="icon"
+                            className="h-6 w-6"
+                            onClick={() => handleRemoveAssignment(a.id)}
                           >
-                            {member.role === 'anesthetist' ? 'Anestesista' : 'Enfermero'}
-                          </Badge>
+                            <X className="h-4 w-4" />
+                          </Button>
                         </div>
-                        {(member.excludedCenters.length > 0 || member.incompatibleWith.length > 0) && (
-                          <AlertTriangle className="h-4 w-4 text-warning" />
-                        )}
-                      </div>
-                    ))}
-                    {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).length === 0 && (
-                      <div className="text-center py-4 text-muted-foreground text-sm">
-                        No hay personal disponible para este turno
-                      </div>
-                    )}
+                      );
+                    })}
                   </div>
                 </div>
-              </>
-            )}
-          </div>
+              )}
+
+              {/* Available members */}
+              <div>
+                <p className="text-sm font-medium mb-2">Disponibles:</p>
+                <div className="space-y-1 max-h-[300px] overflow-y-auto">
+                  {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map(member => (
+                    <div 
+                      key={member.id}
+                      className={cn(
+                        'flex items-center justify-between p-2 rounded cursor-pointer transition-colors',
+                        'hover:bg-secondary'
+                      )}
+                      onClick={() => handleAssignMember(member.id)}
+                    >
+                      <div className="flex items-center gap-2">
+                        <Avatar className="h-8 w-8">
+                          <AvatarFallback>
+                            {member.name.split(' ').map(n => n[0]).join('')}
+                          </AvatarFallback>
+                        </Avatar>
+                        <div>
+                          <p className="text-sm font-medium">{member.name}</p>
+                          <p className="text-xs text-muted-foreground">
+                            {member.role === 'anesthetist' ? 'Anestesista' : 'Enfermero'}
+                          </p>
+                        </div>
+                      </div>
+                      <Badge variant={member.role === 'anesthetist' ? 'default' : 'secondary'}>
+                        {member.role === 'anesthetist' ? 'A' : 'E'}
+                      </Badge>
+                    </div>
+                  ))}
+                  {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).length === 0 && (
+                    <div className="flex items-center gap-2 p-4 rounded bg-warning/10 text-warning">
+                      <AlertTriangle className="h-4 w-4" />
+                      <span className="text-sm">No hay personal disponible</span>
+                    </div>
+                  )}
+                </div>
+              </div>
+            </div>
+          )}
+
           <DialogFooter>
             <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)}>
               Cerrar

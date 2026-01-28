@@ -35,7 +35,7 @@ export function WeeklyOverview() {
             const dayAssignments = getAssignmentsForDay(index);
             
             return (
-              <div key={day} className="min-h-[200px]">
+              <div key={day} className="min-h-[350px]">
                 <div className={cn(
                   'mb-2 rounded-lg p-2 text-center text-sm font-medium',
                   index === new Date().getDay() - 1 ? 'bg-primary text-primary-foreground' : 'bg-secondary text-secondary-foreground'
@@ -43,7 +43,7 @@ export function WeeklyOverview() {
                   {day.slice(0, 3)}
                 </div>
                 <div className="space-y-1">
-                  {dayAssignments.slice(0, 3).map((assignment) => {
+                  {dayAssignments.map((assignment) => {
                     const member = teamMembers.find(m => m.id === assignment.memberId);
                     const center = centers.find(c => c.id === assignment.centerId);
                     if (!member || !center) return null;
@@ -59,11 +59,6 @@ export function WeeklyOverview() {
                       </div>
                     );
                   })}
-                  {dayAssignments.length > 3 && (
-                    <div className="text-xs text-muted-foreground text-center">
-                      +{dayAssignments.length - 3} más
-                    </div>
-                  )}
                 </div>
               </div>
             );

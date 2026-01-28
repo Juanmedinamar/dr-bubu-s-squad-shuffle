@@ -17,7 +17,7 @@ import {
   Download,
   Loader2
 } from 'lucide-react';
-import { useData } from '@/context/DataContext';
+import { useTeamMembers, useCenters, useAssignments } from '@/hooks/useDatabase';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,11 +26,16 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function NotificationsPage() {
-  const { teamMembers, centers, assignments } = useData();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { data: centers = [], isLoading: loadingCenters } = useCenters();
+  const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
+  
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [customMessage, setCustomMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+
+  const isLoading = loadingMembers || loadingCenters || loadingAssignments;
 
   const weekDates = getWeekDates(0);
   const weekStart = weekDates[0].dateStr;
@@ -177,6 +182,19 @@ export default function NotificationsPage() {
   // Preview the message for the first selected member
   const previewMemberId = selectedMembers[0];
   const previewMessage = previewMemberId ? getPersonalizedMessage(previewMemberId) : '';
+
+  if (isLoading) {
+    return (
+      <MainLayout 
+        title="Notificaciones" 
+        subtitle="Envía la planificación al equipo"
+      >
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout 

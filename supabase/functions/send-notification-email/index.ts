@@ -77,7 +77,33 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log("Authenticated user:", claimsData.user.id);
+    const userId = claimsData.user.id;
+    console.log("Authenticated user:", userId);
+
+    // Check user role - require staff or admin
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .single();
+
+    if (roleError || !roleData) {
+      console.error('Failed to fetch user role:', roleError);
+      return new Response(
+        JSON.stringify({ error: 'No autorizado' }),
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (roleData.role !== 'admin' && roleData.role !== 'staff') {
+      console.warn(`User ${userId} with role ${roleData.role} attempted unauthorized access to send-notification-email`);
+      return new Response(
+        JSON.stringify({ error: 'Permisos insuficientes' }),
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log(`User ${userId} authorized with role: ${roleData.role}`);
 
     const requestData = await req.json();
     const { recipients, subject }: NotificationRequest = requestData;
@@ -181,9 +207,15 @@ const handler = async (req: Request): Promise<Response> => {
       }
     );
   } catch (error: any) {
-    console.error("Error in send-notification-email function:", error);
+    // Log detailed error server-side for debugging
+    console.error("Error in send-notification-email function:", {
+      message: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
+    // Return generic error to client
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Error al procesar la solicitud. Por favor, inténtelo de nuevo.' }),
       {
         status: 500,
         headers: { "Content-Type": "application/json", ...corsHeaders },

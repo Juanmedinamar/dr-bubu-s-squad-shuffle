@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -18,15 +18,29 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wand2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wand2, Loader2 } from 'lucide-react';
 import { DAYS_OF_WEEK, SHIFTS, Assignment } from '@/types';
 import { cn } from '@/lib/utils';
-import { useData } from '@/context/DataContext';
+import { useTeamMembers, useCenters, useAssignments, useOperations, useSaveAssignment, useDeleteAssignment } from '@/hooks/useDatabase';
 import { generateDemandSlots } from '@/data/mockData';
 import { toast } from 'sonner';
+import { supabase } from '@/integrations/supabase/client';
 
 export default function SchedulePage() {
-  const { teamMembers, centers, assignments, setAssignments, operations } = useData();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { data: centers = [], isLoading: loadingCenters } = useCenters();
+  const { data: dbAssignments = [], isLoading: loadingAssignments, refetch: refetchAssignments } = useAssignments();
+  const { data: operations = [], isLoading: loadingOperations } = useOperations();
+  
+  const saveAssignmentMutation = useSaveAssignment();
+  const deleteAssignmentMutation = useDeleteAssignment();
+  
+  // Local state for pending changes
+  const [localAssignments, setLocalAssignments] = useState<Assignment[]>([]);
+  const [pendingAdds, setPendingAdds] = useState<Assignment[]>([]);
+  const [pendingDeletes, setPendingDeletes] = useState<string[]>([]);
+  const [isSaving, setIsSaving] = useState(false);
+  
   const [selectedCenter, setSelectedCenter] = useState<string>('all');
   const [weekOffset, setWeekOffset] = useState(0);
   const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
@@ -35,6 +49,23 @@ export default function SchedulePage() {
     date: string;
     shift: 'morning' | 'afternoon';
   } | null>(null);
+
+  const isLoading = loadingMembers || loadingCenters || loadingAssignments || loadingOperations;
+
+  // Sync local assignments with database assignments
+  useEffect(() => {
+    if (!loadingAssignments) {
+      setLocalAssignments(dbAssignments);
+      setPendingAdds([]);
+      setPendingDeletes([]);
+    }
+  }, [dbAssignments, loadingAssignments]);
+
+  // Combined assignments (db + pending adds - pending deletes)
+  const assignments = [
+    ...localAssignments.filter(a => !pendingDeletes.includes(a.id)),
+    ...pendingAdds
+  ];
 
   const demandSlots = generateDemandSlots(operations);
 
@@ -99,19 +130,58 @@ export default function SchedulePage() {
     if (!selectedSlot) return;
     
     const newAssignment: Assignment = {
-      id: `as${Date.now()}`,
+      id: `pending-${Date.now()}`,
       memberId,
       centerId: selectedSlot.centerId,
       date: selectedSlot.date,
       shift: selectedSlot.shift,
     };
     
-    setAssignments(prev => [...prev, newAssignment]);
+    setPendingAdds(prev => [...prev, newAssignment]);
   };
 
   const handleRemoveAssignment = (assignmentId: string) => {
-    setAssignments(prev => prev.filter(a => a.id !== assignmentId));
+    // Check if it's a pending add
+    if (assignmentId.startsWith('pending-')) {
+      setPendingAdds(prev => prev.filter(a => a.id !== assignmentId));
+    } else {
+      // Mark existing assignment for deletion
+      setPendingDeletes(prev => [...prev, assignmentId]);
+    }
   };
+
+  const handleSave = async () => {
+    setIsSaving(true);
+    try {
+      // Delete assignments
+      for (const id of pendingDeletes) {
+        await supabase.from('assignments').delete().eq('id', id);
+      }
+      
+      // Add new assignments
+      for (const assignment of pendingAdds) {
+        await supabase.from('assignments').insert({
+          member_id: assignment.memberId,
+          center_id: assignment.centerId,
+          date: assignment.date,
+          shift: assignment.shift,
+        });
+      }
+      
+      // Refresh data
+      await refetchAssignments();
+      setPendingAdds([]);
+      setPendingDeletes([]);
+      toast.success('Planificación guardada correctamente');
+    } catch (error) {
+      console.error('Error saving assignments:', error);
+      toast.error('Error al guardar la planificación');
+    } finally {
+      setIsSaving(false);
+    }
+  };
+
+  const hasChanges = pendingAdds.length > 0 || pendingDeletes.length > 0;
 
   const handleAutoGenerate = () => {
     const newAssignments: Assignment[] = [];
@@ -180,11 +250,26 @@ export default function SchedulePage() {
       return;
     }
 
-    setAssignments(newAssignments);
-    toast.success(`Planificación generada: ${newAssignments.length} asignaciones`);
+    // Clear pending changes and set new ones
+    setPendingDeletes(localAssignments.map(a => a.id));
+    setPendingAdds(newAssignments);
+    toast.success(`Planificación generada: ${newAssignments.length} asignaciones. Pulsa Guardar para confirmar.`);
   };
 
   const getCenterName = (centerId: string) => centers.find(c => c.id === centerId)?.name || '';
+
+  if (isLoading) {
+    return (
+      <MainLayout 
+        title="Planificación" 
+        subtitle="Asignación de turnos semanales por demanda"
+      >
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout 
@@ -234,13 +319,17 @@ export default function SchedulePage() {
               ))}
             </SelectContent>
           </Select>
-          <Button variant="outline" onClick={handleAutoGenerate}>
+          <Button variant="outline" onClick={handleAutoGenerate} disabled={isSaving}>
             <Wand2 className="mr-2 h-4 w-4" />
             Generar automático
           </Button>
-          <Button>
-            <Save className="mr-2 h-4 w-4" />
-            Guardar
+          <Button onClick={handleSave} disabled={!hasChanges || isSaving}>
+            {isSaving ? (
+              <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+            ) : (
+              <Save className="mr-2 h-4 w-4" />
+            )}
+            Guardar {hasChanges && `(${pendingAdds.length + pendingDeletes.length})`}
           </Button>
         </div>
       </div>

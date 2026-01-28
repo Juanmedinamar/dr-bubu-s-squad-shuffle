@@ -1,11 +1,29 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 // @deno-types="https://esm.sh/v135/jspdf@2.5.1/types/index.d.ts"
 import { jsPDF } from "https://esm.sh/jspdf@2.5.1";
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// Input validation helpers
+function validateUUID(uuid: string): boolean {
+  const uuidRegex = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
+  return uuidRegex.test(uuid);
+}
+
+function validateDate(date: string): boolean {
+  const dateRegex = /^\d{4}-\d{2}-\d{2}$/;
+  if (!dateRegex.test(date)) return false;
+  const parsed = new Date(date + 'T00:00:00');
+  return !isNaN(parsed.getTime());
+}
+
+function validateString(str: string, maxLength: number): boolean {
+  return typeof str === 'string' && str.length > 0 && str.length <= maxLength;
+}
 
 interface TeamMember {
   id: string;
@@ -59,6 +77,71 @@ function getWeekDates(weekStart: string): { dateStr: string; dayName: string }[]
   });
 }
 
+function validateRequest(data: ScheduleRequest): string | null {
+  // Validate array limits
+  if (!Array.isArray(data.teamMembers) || data.teamMembers.length > 100) {
+    return 'teamMembers debe ser un array con máximo 100 elementos';
+  }
+  if (!Array.isArray(data.centers) || data.centers.length > 50) {
+    return 'centers debe ser un array con máximo 50 elementos';
+  }
+  if (!Array.isArray(data.assignments) || data.assignments.length > 1000) {
+    return 'assignments debe ser un array con máximo 1000 elementos';
+  }
+
+  // Validate dates
+  if (!validateDate(data.weekStart)) {
+    return 'weekStart debe ser una fecha válida (YYYY-MM-DD)';
+  }
+  if (!validateDate(data.weekEnd)) {
+    return 'weekEnd debe ser una fecha válida (YYYY-MM-DD)';
+  }
+
+  // Validate team members
+  for (const member of data.teamMembers) {
+    if (!validateUUID(member.id)) {
+      return `ID de miembro inválido: ${member.id}`;
+    }
+    if (!validateString(member.name, 100)) {
+      return 'Nombre de miembro inválido o demasiado largo';
+    }
+    if (!['anesthetist', 'nurse'].includes(member.role)) {
+      return `Rol de miembro inválido: ${member.role}`;
+    }
+  }
+
+  // Validate centers
+  for (const center of data.centers) {
+    if (!validateUUID(center.id)) {
+      return `ID de centro inválido: ${center.id}`;
+    }
+    if (!validateString(center.name, 100)) {
+      return 'Nombre de centro inválido o demasiado largo';
+    }
+  }
+
+  // Validate assignments
+  for (const assignment of data.assignments) {
+    if (!validateUUID(assignment.id)) {
+      return `ID de asignación inválido: ${assignment.id}`;
+    }
+    if (!validateUUID(assignment.memberId)) {
+      return `ID de miembro en asignación inválido: ${assignment.memberId}`;
+    }
+    if (!validateUUID(assignment.centerId)) {
+      return `ID de centro en asignación inválido: ${assignment.centerId}`;
+    }
+    if (!validateDate(assignment.date)) {
+      return `Fecha de asignación inválida: ${assignment.date}`;
+    }
+    if (!['morning', 'afternoon', 'full'].includes(assignment.shift)) {
+      return `Turno de asignación inválido: ${assignment.shift}`;
+    }
+  }
+
+  return null;
+}
+
 const handler = async (req: Request): Promise<Response> => {
   console.log("generate-schedule-pdf function called");
 
@@ -67,7 +150,48 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { teamMembers, centers, assignments, weekStart, weekEnd }: ScheduleRequest = await req.json();
+    // Authentication check
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.error("No authorization header provided");
+      return new Response(
+        JSON.stringify({ error: 'No autorizado' }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabase.auth.getUser(token);
+    
+    if (claimsError || !claimsData?.user) {
+      console.error("Invalid token:", claimsError);
+      return new Response(
+        JSON.stringify({ error: 'Token inválido' }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log("Authenticated user:", claimsData.user.id);
+
+    const requestData: ScheduleRequest = await req.json();
+    
+    // Validate input
+    const validationError = validateRequest(requestData);
+    if (validationError) {
+      console.error("Validation error:", validationError);
+      return new Response(
+        JSON.stringify({ error: validationError }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const { teamMembers, centers, assignments, weekStart, weekEnd } = requestData;
     console.log(`Generating PDF for week ${weekStart} to ${weekEnd}, ${assignments.length} assignments`);
 
     const doc = new jsPDF();

@@ -1,17 +1,39 @@
 import { serve } from "https://deno.land/std@0.190.0/http/server.ts";
 import { Resend } from "https://esm.sh/resend@2.0.0";
+import { createClient } from "https://esm.sh/@supabase/supabase-js@2.49.1";
 
 const resend = new Resend(Deno.env.get("RESEND_API_KEY"));
 
 const corsHeaders = {
   "Access-Control-Allow-Origin": "*",
-  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type",
+  "Access-Control-Allow-Headers": "authorization, x-client-info, apikey, content-type, x-supabase-client-platform, x-supabase-client-platform-version, x-supabase-client-runtime, x-supabase-client-runtime-version",
 };
+
+// Input validation schemas (manual since zod isn't easily importable in Deno edge functions)
+function validateEmail(email: string): boolean {
+  const emailRegex = /^[^\s@]+@[^\s@]+\.[^\s@]+$/;
+  return emailRegex.test(email) && email.length <= 255;
+}
+
+function validateString(str: string, maxLength: number): boolean {
+  return typeof str === 'string' && str.length > 0 && str.length <= maxLength;
+}
+
+function sanitizeHtml(input: string): string {
+  // Remove script tags and on* event handlers
+  return input
+    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
+    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
+    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
+    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
+    .replace(/<embed\b[^>]*>/gi, '')
+    .replace(/<link\b[^>]*>/gi, '');
+}
 
 interface Recipient {
   name: string;
   email: string;
-  message: string; // Personalized message per recipient
+  message: string;
 }
 
 interface NotificationRequest {
@@ -28,38 +50,100 @@ const handler = async (req: Request): Promise<Response> => {
   }
 
   try {
-    const { recipients, subject }: NotificationRequest = await req.json();
+    // Authentication check
+    const authHeader = req.headers.get('Authorization');
+    if (!authHeader?.startsWith('Bearer ')) {
+      console.error("No authorization header provided");
+      return new Response(
+        JSON.stringify({ error: 'No autorizado' }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    const supabase = createClient(
+      Deno.env.get('SUPABASE_URL')!,
+      Deno.env.get('SUPABASE_ANON_KEY')!,
+      { global: { headers: { Authorization: authHeader } } }
+    );
+
+    const token = authHeader.replace('Bearer ', '');
+    const { data: claimsData, error: claimsError } = await supabase.auth.getUser(token);
     
+    if (claimsError || !claimsData?.user) {
+      console.error("Invalid token:", claimsError);
+      return new Response(
+        JSON.stringify({ error: 'Token inválido' }),
+        { status: 401, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log("Authenticated user:", claimsData.user.id);
+
+    const requestData = await req.json();
+    const { recipients, subject }: NotificationRequest = requestData;
+    
+    // Input validation
+    if (!Array.isArray(recipients) || recipients.length === 0) {
+      return new Response(
+        JSON.stringify({ error: 'Se requiere al menos un destinatario' }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (recipients.length > 50) {
+      return new Response(
+        JSON.stringify({ error: 'Máximo 50 destinatarios por envío' }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (!validateString(subject, 200)) {
+      return new Response(
+        JSON.stringify({ error: 'El asunto debe tener entre 1 y 200 caracteres' }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    // Check for header injection in subject
+    if (subject.includes('\n') || subject.includes('\r')) {
+      return new Response(
+        JSON.stringify({ error: 'El asunto no puede contener saltos de línea' }),
+        { status: 400, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
     console.log(`Sending email to ${recipients.length} recipients`);
-
-    // Validate required fields
-    if (!recipients || recipients.length === 0) {
-      throw new Error("No recipients provided");
-    }
-
-    if (!subject) {
-      throw new Error("Subject is required");
-    }
 
     const results = [];
     const errors = [];
 
-    // Send emails to each recipient
     for (const recipient of recipients) {
-      if (!recipient.email) {
-        console.log(`Skipping ${recipient.name}: no email address`);
-        errors.push({ name: recipient.name, error: "No email address" });
+      // Validate each recipient
+      if (!validateString(recipient.name, 100)) {
+        errors.push({ name: recipient.name || 'Unknown', error: 'Nombre inválido' });
+        continue;
+      }
+
+      if (!recipient.email || !validateEmail(recipient.email)) {
+        console.log(`Skipping ${recipient.name}: invalid email address`);
+        errors.push({ name: recipient.name, error: 'Dirección de email inválida' });
+        continue;
+      }
+
+      if (!validateString(recipient.message, 5000)) {
+        errors.push({ name: recipient.name, error: 'Mensaje inválido o demasiado largo' });
         continue;
       }
 
       try {
-        // Convert message to HTML (preserve line breaks and formatting)
-        const htmlMessage = recipient.message
+        // Sanitize and convert message to HTML
+        const sanitizedMessage = sanitizeHtml(recipient.message);
+        const htmlMessage = sanitizedMessage
           .replace(/\n/g, '<br>')
-          .replace(/\*([^*]+)\*/g, '<strong>$1</strong>'); // Bold markdown
+          .replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
 
         const emailResponse = await resend.emails.send({
-          from: "Dr. Bubu <onboarding@resend.dev>", // Use verified domain in production
+          from: "Dr. Bubu <onboarding@resend.dev>",
           to: [recipient.email],
           subject: subject,
           html: `

@@ -177,7 +177,33 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    console.log("Authenticated user:", claimsData.user.id);
+    const userId = claimsData.user.id;
+    console.log("Authenticated user:", userId);
+
+    // Check user role - require staff or admin
+    const { data: roleData, error: roleError } = await supabase
+      .from('user_roles')
+      .select('role')
+      .eq('user_id', userId)
+      .single();
+
+    if (roleError || !roleData) {
+      console.error('Failed to fetch user role:', roleError);
+      return new Response(
+        JSON.stringify({ error: 'No autorizado' }),
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    if (roleData.role !== 'admin' && roleData.role !== 'staff') {
+      console.warn(`User ${userId} with role ${roleData.role} attempted unauthorized access to generate-schedule-pdf`);
+      return new Response(
+        JSON.stringify({ error: 'Permisos insuficientes' }),
+        { status: 403, headers: { "Content-Type": "application/json", ...corsHeaders } }
+      );
+    }
+
+    console.log(`User ${userId} authorized with role: ${roleData.role}`);
 
     const requestData: ScheduleRequest = await req.json();
     
@@ -295,9 +321,15 @@ const handler = async (req: Request): Promise<Response> => {
       }
     );
   } catch (error: any) {
-    console.error("Error generating PDF:", error);
+    // Log detailed error server-side for debugging
+    console.error("Error generating PDF:", {
+      message: error.message,
+      stack: error.stack,
+      timestamp: new Date().toISOString()
+    });
+    // Return generic error to client
     return new Response(
-      JSON.stringify({ error: error.message }),
+      JSON.stringify({ error: 'Error al generar el PDF. Por favor, inténtelo de nuevo.' }),
       {
         status: 500,
         headers: { ...corsHeaders, "Content-Type": "application/json" },

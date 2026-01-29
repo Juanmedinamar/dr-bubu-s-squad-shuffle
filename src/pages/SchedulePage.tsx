@@ -18,15 +18,20 @@ import {
   DialogTitle,
   DialogFooter,
 } from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wand2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wand2, Loader2 } from 'lucide-react';
 import { DAYS_OF_WEEK, SHIFTS, Assignment } from '@/types';
 import { cn } from '@/lib/utils';
-import { useData } from '@/context/DataContext';
+import { useTeamMembers, useCenters, useAssignments, useOperations, useSaveAssignment, useDeleteAssignment } from '@/hooks/useDatabase';
 import { generateDemandSlots } from '@/data/mockData';
 import { toast } from 'sonner';
 
 export default function SchedulePage() {
-  const { teamMembers, centers, assignments, setAssignments, operations } = useData();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { data: centers = [], isLoading: loadingCenters } = useCenters();
+  const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
+  const { data: operations = [], isLoading: loadingOperations } = useOperations();
+  const saveAssignment = useSaveAssignment();
+  const deleteAssignment = useDeleteAssignment();
   
   const [selectedCenter, setSelectedCenter] = useState<string>('all');
   const [weekOffset, setWeekOffset] = useState(0);
@@ -36,6 +41,8 @@ export default function SchedulePage() {
     date: string;
     shift: 'morning' | 'afternoon';
   } | null>(null);
+
+  const isLoading = loadingMembers || loadingCenters || loadingAssignments || loadingOperations;
 
   const demandSlots = generateDemandSlots(operations);
 
@@ -96,30 +103,33 @@ export default function SchedulePage() {
     setIsAssignDialogOpen(true);
   };
 
-  const handleAssignMember = (memberId: string) => {
+  const handleAssignMember = async (memberId: string) => {
     if (!selectedSlot) return;
     
-    const newAssignment: Assignment = {
-      id: `as${Date.now()}`,
-      memberId,
-      centerId: selectedSlot.centerId,
-      date: selectedSlot.date,
-      shift: selectedSlot.shift,
-    };
-    
-    setAssignments(prev => [...prev, newAssignment]);
+    try {
+      await saveAssignment.mutateAsync({
+        memberId,
+        centerId: selectedSlot.centerId,
+        date: selectedSlot.date,
+        shift: selectedSlot.shift,
+      });
+      toast.success('Asignación creada');
+    } catch (error: any) {
+      toast.error('Error al asignar: ' + error.message);
+    }
   };
 
-  const handleRemoveAssignment = (assignmentId: string) => {
-    setAssignments(prev => prev.filter(a => a.id !== assignmentId));
+  const handleRemoveAssignment = async (assignmentId: string) => {
+    try {
+      await deleteAssignment.mutateAsync(assignmentId);
+      toast.success('Asignación eliminada');
+    } catch (error: any) {
+      toast.error('Error al eliminar: ' + error.message);
+    }
   };
 
-  const handleSave = () => {
-    toast.success('Planificación guardada correctamente');
-  };
-
-  const handleAutoGenerate = () => {
-    const newAssignments: Assignment[] = [];
+  const handleAutoGenerate = async () => {
+    const newAssignments: Omit<Assignment, 'id'>[] = [];
     const usedMembersByDate: Record<string, Set<string>> = {};
 
     weekDates.slice(0, 5).forEach(({ fullDate }) => {
@@ -149,7 +159,6 @@ export default function SchedulePage() {
           const toAssign = availableAnesthetists.slice(0, demand.requiredAnesthetists);
           toAssign.forEach(member => {
             newAssignments.push({
-              id: `as${Date.now()}-${member.id}-${shift}`,
               memberId: member.id,
               centerId: center.id,
               date: fullDate,
@@ -168,7 +177,6 @@ export default function SchedulePage() {
           const nursesToAssign = availableNurses.slice(0, demand.requiredNurses);
           nursesToAssign.forEach(member => {
             newAssignments.push({
-              id: `as${Date.now()}-${member.id}-${shift}-n`,
               memberId: member.id,
               centerId: center.id,
               date: fullDate,
@@ -185,11 +193,28 @@ export default function SchedulePage() {
       return;
     }
 
-    setAssignments(newAssignments);
-    toast.success(`Planificación generada: ${newAssignments.length} asignaciones`);
+    // Save all assignments to database
+    try {
+      for (const assignment of newAssignments) {
+        await saveAssignment.mutateAsync(assignment);
+      }
+      toast.success(`Planificación generada: ${newAssignments.length} asignaciones`);
+    } catch (error: any) {
+      toast.error('Error al generar: ' + error.message);
+    }
   };
 
   const getCenterName = (centerId: string) => centers.find(c => c.id === centerId)?.name || '';
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Planificación" subtitle="Asignación de turnos semanales por demanda">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout 
@@ -242,10 +267,6 @@ export default function SchedulePage() {
           <Button variant="outline" onClick={handleAutoGenerate}>
             <Wand2 className="mr-2 h-4 w-4" />
             Generar automático
-          </Button>
-          <Button onClick={handleSave}>
-            <Save className="mr-2 h-4 w-4" />
-            Guardar
           </Button>
         </div>
       </div>
@@ -428,36 +449,34 @@ export default function SchedulePage() {
                 <p className="text-sm font-medium mb-2">Disponibles:</p>
                 <div className="space-y-1 max-h-[300px] overflow-y-auto">
                   {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map(member => (
-                    <div 
+                    <div
                       key={member.id}
                       className={cn(
-                        'flex items-center justify-between p-2 rounded cursor-pointer transition-colors',
-                        'hover:bg-secondary'
+                        'flex items-center justify-between p-2 rounded cursor-pointer hover:bg-secondary/80',
+                        member.role === 'anesthetist' ? 'bg-anesthetist-light/50' : 'bg-nurse-light/50'
                       )}
                       onClick={() => handleAssignMember(member.id)}
                     >
                       <div className="flex items-center gap-2">
-                        <Avatar className="h-8 w-8">
-                          <AvatarFallback>
-                            {member.name.split(' ').map(n => n[0]).join('')}
+                        <Avatar className="h-6 w-6">
+                          <AvatarFallback className={cn(
+                            'text-[10px] text-white',
+                            member.role === 'anesthetist' ? 'bg-anesthetist' : 'bg-nurse'
+                          )}>
+                            {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
                           </AvatarFallback>
                         </Avatar>
-                        <div>
-                          <p className="text-sm font-medium">{member.name}</p>
-                          <p className="text-xs text-muted-foreground">
-                            {member.role === 'anesthetist' ? 'Anestesista' : 'Enfermero'}
-                          </p>
-                        </div>
+                        <span className="text-sm">{member.name}</span>
                       </div>
-                      <Badge variant={member.role === 'anesthetist' ? 'default' : 'secondary'}>
-                        {member.role === 'anesthetist' ? 'A' : 'E'}
+                      <Badge variant="outline" className="text-xs">
+                        {member.role === 'anesthetist' ? 'Anest.' : 'Enf.'}
                       </Badge>
                     </div>
                   ))}
                   {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).length === 0 && (
-                    <div className="flex items-center gap-2 p-4 rounded bg-warning/10 text-warning">
+                    <div className="flex items-center gap-2 p-3 text-muted-foreground text-sm">
                       <AlertTriangle className="h-4 w-4" />
-                      <span className="text-sm">No hay personal disponible</span>
+                      No hay personal disponible
                     </div>
                   )}
                 </div>

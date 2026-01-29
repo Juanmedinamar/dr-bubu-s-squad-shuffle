@@ -28,20 +28,26 @@ import {
   TableRow,
 } from '@/components/ui/table';
 import { Textarea } from '@/components/ui/textarea';
-import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, Clock, Users, Stethoscope } from 'lucide-react';
+import { ChevronLeft, ChevronRight, Plus, Edit, Trash2, Clock, Users, Stethoscope, Loader2 } from 'lucide-react';
 import { DAYS_OF_WEEK, SHIFTS, OPERATION_TYPES, SPECIALTIES, Operation, OperationType, Specialty } from '@/types';
 import { cn } from '@/lib/utils';
-import { useData } from '@/context/DataContext';
+import { useCenters, useOperations, useSaveOperation, useDeleteOperation } from '@/hooks/useDatabase';
 import { generateDemandSlots } from '@/data/mockData';
 import { toast } from 'sonner';
 
 export default function OperationsPage() {
-  const { centers, operations, setOperations } = useData();
+  const { data: centers = [], isLoading: loadingCenters } = useCenters();
+  const { data: operations = [], isLoading: loadingOperations } = useOperations();
+  const saveOperation = useSaveOperation();
+  const deleteOperation = useDeleteOperation();
+
   const [selectedCenter, setSelectedCenter] = useState<string>('all');
   const [weekOffset, setWeekOffset] = useState(0);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
   const [editingOperation, setEditingOperation] = useState<Operation | null>(null);
   
+  const isLoading = loadingCenters || loadingOperations;
+
   // Form state
   const [formData, setFormData] = useState({
     centerId: '',
@@ -118,34 +124,42 @@ export default function OperationsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleSaveOperation = () => {
+  const handleSaveOperation = async () => {
     if (!formData.centerId || !formData.date || !formData.operatingRoom) {
       toast.error('Por favor completa los campos obligatorios');
       return;
     }
 
-    if (editingOperation) {
-      setOperations(prev => prev.map(op => 
-        op.id === editingOperation.id 
-          ? { ...op, ...formData }
-          : op
-      ));
-      toast.success('Operación actualizada');
-    } else {
-      const newOperation: Operation = {
-        id: `op${Date.now()}`,
+    try {
+      await saveOperation.mutateAsync({
+        id: editingOperation?.id,
         ...formData,
-      };
-      setOperations(prev => [...prev, newOperation]);
-      toast.success('Operación creada');
+      });
+      toast.success(editingOperation ? 'Operación actualizada' : 'Operación creada');
+      setIsDialogOpen(false);
+    } catch (error: any) {
+      toast.error('Error al guardar: ' + error.message);
     }
-    setIsDialogOpen(false);
   };
 
-  const handleDeleteOperation = (id: string) => {
-    setOperations(prev => prev.filter(op => op.id !== id));
-    toast.success('Operación eliminada');
+  const handleDeleteOperation = async (id: string) => {
+    try {
+      await deleteOperation.mutateAsync(id);
+      toast.success('Operación eliminada');
+    } catch (error: any) {
+      toast.error('Error al eliminar: ' + error.message);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Operaciones" subtitle="Gestión de operaciones programadas">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout 
@@ -427,7 +441,10 @@ export default function OperationsPage() {
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveOperation}>
+            <Button onClick={handleSaveOperation} disabled={saveOperation.isPending}>
+              {saveOperation.isPending ? (
+                <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+              ) : null}
               {editingOperation ? 'Guardar Cambios' : 'Crear Operación'}
             </Button>
           </DialogFooter>

@@ -2,10 +2,15 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DAYS_OF_WEEK } from '@/types';
 import { cn } from '@/lib/utils';
-import { useData } from '@/context/DataContext';
+import { useAssignments, useTeamMembers, useCenters } from '@/hooks/useDatabase';
+import { Loader2 } from 'lucide-react';
 
 export function WeeklyOverview() {
-  const { assignments, teamMembers, centers } = useData();
+  const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { data: centers = [], isLoading: loadingCenters } = useCenters();
+
+  const isLoading = loadingAssignments || loadingMembers || loadingCenters;
 
   const getAssignmentsForDay = (dayIndex: number) => {
     // Get today's date and calculate the date for the given day
@@ -18,6 +23,21 @@ export function WeeklyOverview() {
 
     return assignments.filter(a => a.date === dateStr);
   };
+
+  if (isLoading) {
+    return (
+      <Card className="animate-fade-in">
+        <CardHeader>
+          <CardTitle>Vista Semanal</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-48">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="animate-fade-in">

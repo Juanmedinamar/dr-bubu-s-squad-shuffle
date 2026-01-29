@@ -3,15 +3,28 @@ import { StatCard } from '@/components/dashboard/StatCard';
 import { WeeklyOverview } from '@/components/dashboard/WeeklyOverview';
 import { TeamList } from '@/components/dashboard/TeamList';
 import { AlertsPanel } from '@/components/dashboard/AlertsPanel';
-import { Users, Building2, AlertTriangle } from 'lucide-react';
-import { useData } from '@/context/DataContext';
+import { Users, Building2, AlertTriangle, Loader2 } from 'lucide-react';
+import { useTeamMembers, useCenters } from '@/hooks/useDatabase';
 
 const Index = () => {
-  const { teamMembers, centers } = useData();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { data: centers = [], isLoading: loadingCenters } = useCenters();
+  
+  const isLoading = loadingMembers || loadingCenters;
   
   const anesthetistCount = teamMembers.filter(m => m.role === 'anesthetist').length;
   const nurseCount = teamMembers.filter(m => m.role === 'nurse').length;
   const conflictCount = teamMembers.filter(m => m.incompatibleWith.length > 0).length;
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Dashboard" subtitle="Gestión de turnos del equipo del Dr. Bubu">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout 

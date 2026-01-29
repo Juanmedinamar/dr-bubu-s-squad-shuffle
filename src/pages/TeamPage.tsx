@@ -13,17 +13,21 @@ import {
   TableHeader, 
   TableRow 
 } from '@/components/ui/table';
-import { Plus, Search, Mail, Phone, AlertCircle, Building2, Edit, Trash2 } from 'lucide-react';
+import { Plus, Search, Mail, Phone, AlertCircle, Building2, Edit, Trash2, Loader2 } from 'lucide-react';
 import { TeamMember } from '@/types';
 import { cn } from '@/lib/utils';
 import { EditRestrictionsDialog } from '@/components/team/EditRestrictionsDialog';
 import { AddEditMemberDialog } from '@/components/team/AddEditMemberDialog';
 import { DeleteMemberDialog } from '@/components/team/DeleteMemberDialog';
-import { useData } from '@/context/DataContext';
+import { useTeamMembers, useCenters, useSaveTeamMember, useDeleteTeamMember } from '@/hooks/useDatabase';
 import { toast } from 'sonner';
 
 export default function TeamPage() {
-  const { teamMembers, setTeamMembers, centers } = useData();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { data: centers = [], isLoading: loadingCenters } = useCenters();
+  const saveMember = useSaveTeamMember();
+  const deleteMember = useDeleteTeamMember();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [selectedRole, setSelectedRole] = useState<'all' | 'anesthetist' | 'nurse'>('all');
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
@@ -32,6 +36,8 @@ export default function TeamPage() {
   const [memberToEdit, setMemberToEdit] = useState<TeamMember | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [memberToDelete, setMemberToDelete] = useState<TeamMember | null>(null);
+
+  const isLoading = loadingMembers || loadingCenters;
 
   const filteredMembers = teamMembers.filter(member => {
     const matchesSearch = member.name.toLowerCase().includes(searchTerm.toLowerCase());
@@ -48,22 +54,20 @@ export default function TeamPage() {
     setIsRestrictionsDialogOpen(true);
   };
 
-  const handleSaveRestrictions = (memberId: string, excludedCenters: string[], incompatibleWith: string[]) => {
-    setTeamMembers(prev => prev.map(m => {
-      if (m.id === memberId) {
-        return { ...m, excludedCenters, incompatibleWith };
-      }
-      const wasIncompatible = teamMembers.find(tm => tm.id === memberId)?.incompatibleWith.includes(m.id);
-      const isNowIncompatible = incompatibleWith.includes(m.id);
-      
-      if (isNowIncompatible && !m.incompatibleWith.includes(memberId)) {
-        return { ...m, incompatibleWith: [...m.incompatibleWith, memberId] };
-      }
-      if (!isNowIncompatible && m.incompatibleWith.includes(memberId)) {
-        return { ...m, incompatibleWith: m.incompatibleWith.filter(id => id !== memberId) };
-      }
-      return m;
-    }));
+  const handleSaveRestrictions = async (memberId: string, excludedCenters: string[], incompatibleWith: string[]) => {
+    const member = teamMembers.find(m => m.id === memberId);
+    if (!member) return;
+
+    try {
+      await saveMember.mutateAsync({
+        ...member,
+        excludedCenters,
+        incompatibleWith,
+      });
+      toast.success('Restricciones actualizadas');
+    } catch (error: any) {
+      toast.error('Error al guardar restricciones: ' + error.message);
+    }
   };
 
   const handleAddMember = () => {
@@ -76,19 +80,12 @@ export default function TeamPage() {
     setIsAddEditDialogOpen(true);
   };
 
-  const handleSaveMember = (memberData: Omit<TeamMember, 'id'> & { id?: string }) => {
-    if (memberData.id) {
-      setTeamMembers(prev => prev.map(m => 
-        m.id === memberData.id ? { ...m, ...memberData } as TeamMember : m
-      ));
-      toast.success('Miembro actualizado correctamente');
-    } else {
-      const newMember: TeamMember = {
-        ...memberData,
-        id: `m${Date.now()}`,
-      } as TeamMember;
-      setTeamMembers(prev => [...prev, newMember]);
-      toast.success('Miembro añadido correctamente');
+  const handleSaveMember = async (memberData: Omit<TeamMember, 'id'> & { id?: string }) => {
+    try {
+      await saveMember.mutateAsync(memberData);
+      toast.success(memberData.id ? 'Miembro actualizado correctamente' : 'Miembro añadido correctamente');
+    } catch (error: any) {
+      toast.error('Error al guardar: ' + error.message);
     }
   };
 
@@ -97,13 +94,24 @@ export default function TeamPage() {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleConfirmDelete = (memberId: string) => {
-    setTeamMembers(prev => prev.filter(m => m.id !== memberId).map(m => ({
-      ...m,
-      incompatibleWith: m.incompatibleWith.filter(id => id !== memberId)
-    })));
-    toast.success('Miembro eliminado correctamente');
+  const handleConfirmDelete = async (memberId: string) => {
+    try {
+      await deleteMember.mutateAsync(memberId);
+      toast.success('Miembro eliminado correctamente');
+    } catch (error: any) {
+      toast.error('Error al eliminar: ' + error.message);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Equipo" subtitle="Gestión de anestesistas y enfermeros">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Equipo" subtitle="Gestión de anestesistas y enfermeros">

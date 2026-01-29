@@ -2,13 +2,29 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
-import { useData } from '@/context/DataContext';
+import { useTeamMembers } from '@/hooks/useDatabase';
+import { Loader2 } from 'lucide-react';
 
 export function TeamList() {
-  const { teamMembers } = useData();
+  const { data: teamMembers = [], isLoading } = useTeamMembers();
   
   const anesthetists = teamMembers.filter(m => m.role === 'anesthetist').slice(0, 5);
   const nurses = teamMembers.filter(m => m.role === 'nurse');
+
+  if (isLoading) {
+    return (
+      <Card className="animate-fade-in">
+        <CardHeader>
+          <CardTitle>Equipo Disponible</CardTitle>
+        </CardHeader>
+        <CardContent>
+          <div className="flex items-center justify-center h-32">
+            <Loader2 className="h-6 w-6 animate-spin text-muted-foreground" />
+          </div>
+        </CardContent>
+      </Card>
+    );
+  }
 
   return (
     <Card className="animate-fade-in">

@@ -3,19 +3,25 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Plus, MapPin, Users, Edit, Trash2 } from 'lucide-react';
+import { Plus, MapPin, Users, Edit, Trash2, Loader2 } from 'lucide-react';
 import { Center } from '@/types';
 import { AddEditCenterDialog } from '@/components/centers/AddEditCenterDialog';
 import { DeleteCenterDialog } from '@/components/centers/DeleteCenterDialog';
-import { useData } from '@/context/DataContext';
+import { useCenters, useTeamMembers, useSaveCenter, useDeleteCenter } from '@/hooks/useDatabase';
 import { toast } from 'sonner';
 
 export default function CentersPage() {
-  const { centers, setCenters, teamMembers } = useData();
+  const { data: centers = [], isLoading: loadingCenters } = useCenters();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const saveCenter = useSaveCenter();
+  const deleteCenter = useDeleteCenter();
+
   const [isAddEditDialogOpen, setIsAddEditDialogOpen] = useState(false);
   const [centerToEdit, setCenterToEdit] = useState<Center | null>(null);
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [centerToDelete, setCenterToDelete] = useState<Center | null>(null);
+
+  const isLoading = loadingCenters || loadingMembers;
 
   const getExcludedCount = (centerId: string) => {
     return teamMembers.filter(m => m.excludedCenters.includes(centerId)).length;
@@ -31,19 +37,12 @@ export default function CentersPage() {
     setIsAddEditDialogOpen(true);
   };
 
-  const handleSaveCenter = (centerData: Omit<Center, 'id'> & { id?: string }) => {
-    if (centerData.id) {
-      setCenters(prev => prev.map(c => 
-        c.id === centerData.id ? { ...c, ...centerData } as Center : c
-      ));
-      toast.success('Centro actualizado correctamente');
-    } else {
-      const newCenter: Center = {
-        ...centerData,
-        id: `c${Date.now()}`,
-      } as Center;
-      setCenters(prev => [...prev, newCenter]);
-      toast.success('Centro añadido correctamente');
+  const handleSaveCenter = async (centerData: Omit<Center, 'id'> & { id?: string }) => {
+    try {
+      await saveCenter.mutateAsync(centerData);
+      toast.success(centerData.id ? 'Centro actualizado correctamente' : 'Centro añadido correctamente');
+    } catch (error: any) {
+      toast.error('Error al guardar: ' + error.message);
     }
   };
 
@@ -52,10 +51,24 @@ export default function CentersPage() {
     setIsDeleteDialogOpen(true);
   };
 
-  const handleConfirmDelete = (centerId: string) => {
-    setCenters(prev => prev.filter(c => c.id !== centerId));
-    toast.success('Centro eliminado correctamente');
+  const handleConfirmDelete = async (centerId: string) => {
+    try {
+      await deleteCenter.mutateAsync(centerId);
+      toast.success('Centro eliminado correctamente');
+    } catch (error: any) {
+      toast.error('Error al eliminar: ' + error.message);
+    }
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Centros" subtitle="Gestión de centros de trabajo">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout title="Centros" subtitle="Gestión de centros de trabajo">

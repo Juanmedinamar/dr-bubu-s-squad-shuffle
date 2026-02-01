@@ -89,18 +89,37 @@ export function useDeleteCenter() {
   });
 }
 
-// Team Members hooks
-export function useTeamMembers() {
+// Team Members hooks - uses secure function for viewers, direct table for staff/admin
+export function useTeamMembers(userRole?: 'admin' | 'staff' | 'viewer' | null) {
   return useQuery({
-    queryKey: ['team_members'],
+    queryKey: ['team_members', userRole],
     queryFn: async () => {
-      const { data, error } = await supabase
-        .from('team_members')
-        .select('*')
-        .order('name');
+      // Staff and admins can access full team_members table
+      if (userRole === 'admin' || userRole === 'staff') {
+        const { data, error } = await supabase
+          .from('team_members')
+          .select('*')
+          .order('name');
+        if (error) throw error;
+        return data.map(mapDbToTeamMember);
+      }
+      
+      // Viewers use the secure function that only returns public fields
+      const { data, error } = await supabase.rpc('get_team_members_public');
       if (error) throw error;
-      return data.map(mapDbToTeamMember);
+      
+      // Map to TeamMember type with empty sensitive fields
+      return (data || []).map((row: any): TeamMember => ({
+        id: row.id,
+        name: row.name,
+        role: row.role,
+        email: undefined, // Not accessible to viewers
+        phone: undefined, // Not accessible to viewers
+        excludedCenters: [], // Not accessible to viewers
+        incompatibleWith: [], // Not accessible to viewers
+      }));
     },
+    enabled: userRole !== undefined, // Only run when role is determined
   });
 }
 

@@ -3,10 +3,12 @@ import { Badge } from '@/components/ui/badge';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { cn } from '@/lib/utils';
 import { useTeamMembers } from '@/hooks/useDatabase';
+import { useAuth } from '@/hooks/useAuth';
 import { Loader2 } from 'lucide-react';
 
 export function TeamList() {
-  const { data: teamMembers = [], isLoading } = useTeamMembers();
+  const { role } = useAuth();
+  const { data: teamMembers = [], isLoading } = useTeamMembers(role);
   
   const anesthetists = teamMembers.filter(m => m.role === 'anesthetist').slice(0, 5);
   const nurses = teamMembers.filter(m => m.role === 'nurse');

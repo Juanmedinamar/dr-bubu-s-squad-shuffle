@@ -54,13 +54,6 @@ export type Database = {
             referencedRelation: "team_members"
             referencedColumns: ["id"]
           },
-          {
-            foreignKeyName: "assignments_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "team_members_public"
-            referencedColumns: ["id"]
-          },
         ]
       }
       centers: {
@@ -118,13 +111,6 @@ export type Database = {
             columns: ["member_id"]
             isOneToOne: false
             referencedRelation: "team_members"
-            referencedColumns: ["id"]
-          },
-          {
-            foreignKeyName: "operation_assignments_member_id_fkey"
-            columns: ["member_id"]
-            isOneToOne: false
-            referencedRelation: "team_members_public"
             referencedColumns: ["id"]
           },
           {
@@ -251,32 +237,19 @@ export type Database = {
       }
     }
     Views: {
-      team_members_public: {
-        Row: {
-          created_at: string | null
-          id: string | null
-          name: string | null
-          role: string | null
-          updated_at: string | null
-        }
-        Insert: {
-          created_at?: string | null
-          id?: string | null
-          name?: string | null
-          role?: string | null
-          updated_at?: string | null
-        }
-        Update: {
-          created_at?: string | null
-          id?: string | null
-          name?: string | null
-          role?: string | null
-          updated_at?: string | null
-        }
-        Relationships: []
-      }
+      [_ in never]: never
     }
     Functions: {
+      get_team_members_public: {
+        Args: never
+        Returns: {
+          created_at: string
+          id: string
+          name: string
+          role: string
+          updated_at: string
+        }[]
+      }
       has_role: {
         Args: {
           _role: Database["public"]["Enums"]["app_role"]

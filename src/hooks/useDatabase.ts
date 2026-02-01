@@ -321,7 +321,9 @@ export function useMonthlyOperationsSummary(year: number, month: number) {
     queryKey: ['monthly_summary', year, month],
     queryFn: async () => {
       const startDate = `${year}-${String(month).padStart(2, '0')}-01`;
-      const endDate = `${year}-${String(month).padStart(2, '0')}-31`;
+      // Calculate actual last day of the month
+      const lastDay = new Date(year, month, 0).getDate();
+      const endDate = `${year}-${String(month).padStart(2, '0')}-${String(lastDay).padStart(2, '0')}`;
       
       // Get operations in date range
       const { data: operations, error: opError } = await supabase

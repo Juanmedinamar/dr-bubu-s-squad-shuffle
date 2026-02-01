@@ -15,13 +15,19 @@ import {
   DialogFooter,
 } from '@/components/ui/dialog';
 import { Checkbox } from '@/components/ui/checkbox';
-import { Search, Building2, AlertCircle, X, Plus, Edit } from 'lucide-react';
+import { Search, Building2, AlertCircle, X, Plus, Edit, Loader2 } from 'lucide-react';
 import { TeamMember } from '@/types';
 import { cn } from '@/lib/utils';
-import { useData } from '@/context/DataContext';
+import { useTeamMembers, useCenters, useSaveTeamMember } from '@/hooks/useDatabase';
+import { useAuth } from '@/hooks/useAuth';
+import { toast } from 'sonner';
 
 export default function RestrictionsPage() {
-  const { teamMembers, setTeamMembers, centers } = useData();
+  const { role } = useAuth();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers(role);
+  const { data: centers = [], isLoading: loadingCenters } = useCenters();
+  const saveMember = useSaveTeamMember();
+
   const [searchTerm, setSearchTerm] = useState('');
   const [editingMember, setEditingMember] = useState<TeamMember | null>(null);
   const [isDialogOpen, setIsDialogOpen] = useState(false);
@@ -30,6 +36,8 @@ export default function RestrictionsPage() {
   // Edit form state
   const [selectedCenters, setSelectedCenters] = useState<string[]>([]);
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
+
+  const isLoading = loadingMembers || loadingCenters;
 
   const filteredMembers = teamMembers.filter(member => 
     member.name.toLowerCase().includes(searchTerm.toLowerCase())
@@ -53,50 +61,90 @@ export default function RestrictionsPage() {
     setIsDialogOpen(true);
   };
 
-  const handleSaveRestrictions = () => {
+  const handleSaveRestrictions = async () => {
     if (!editingMember) return;
     
-    setTeamMembers(prev => prev.map(m => {
-      if (m.id === editingMember.id) {
-        if (editType === 'centers') {
-          return { ...m, excludedCenters: selectedCenters };
-        } else {
-          return { ...m, incompatibleWith: selectedMembers };
+    try {
+      if (editType === 'centers') {
+        await saveMember.mutateAsync({
+          ...editingMember,
+          excludedCenters: selectedCenters,
+        });
+        toast.success('Restricciones de centros actualizadas');
+      } else {
+        // Update the editing member's incompatibilities
+        await saveMember.mutateAsync({
+          ...editingMember,
+          incompatibleWith: selectedMembers,
+        });
+        
+        // Update bidirectional incompatibilities
+        for (const memberId of selectedMembers) {
+          const otherMember = teamMembers.find(m => m.id === memberId);
+          if (otherMember && !otherMember.incompatibleWith.includes(editingMember.id)) {
+            await saveMember.mutateAsync({
+              ...otherMember,
+              incompatibleWith: [...otherMember.incompatibleWith, editingMember.id],
+            });
+          }
         }
+        
+        // Remove bidirectional incompatibilities for deselected members
+        const previouslySelected = editingMember.incompatibleWith;
+        const nowDeselected = previouslySelected.filter(id => !selectedMembers.includes(id));
+        for (const memberId of nowDeselected) {
+          const otherMember = teamMembers.find(m => m.id === memberId);
+          if (otherMember) {
+            await saveMember.mutateAsync({
+              ...otherMember,
+              incompatibleWith: otherMember.incompatibleWith.filter(id => id !== editingMember.id),
+            });
+          }
+        }
+        
+        toast.success('Incompatibilidades actualizadas');
       }
-      // Si es incompatibilidad, también actualizar el otro miembro
-      if (editType === 'members') {
-        if (selectedMembers.includes(m.id) && !m.incompatibleWith.includes(editingMember.id)) {
-          return { ...m, incompatibleWith: [...m.incompatibleWith, editingMember.id] };
-        }
-        if (!selectedMembers.includes(m.id) && m.incompatibleWith.includes(editingMember.id)) {
-          return { ...m, incompatibleWith: m.incompatibleWith.filter(id => id !== editingMember.id) };
-        }
-      }
-      return m;
-    }));
-    
-    setIsDialogOpen(false);
+      setIsDialogOpen(false);
+    } catch (error) {
+      console.error('Error saving restrictions:', error);
+      toast.error('Error al guardar las restricciones');
+    }
   };
 
-  const handleRemoveCenterRestriction = (memberId: string, centerId: string) => {
-    setTeamMembers(prev => prev.map(m => 
-      m.id === memberId 
-        ? { ...m, excludedCenters: m.excludedCenters.filter(c => c !== centerId) }
-        : m
-    ));
+  const handleRemoveCenterRestriction = async (member: TeamMember, centerId: string) => {
+    try {
+      await saveMember.mutateAsync({
+        ...member,
+        excludedCenters: member.excludedCenters.filter(c => c !== centerId),
+      });
+      toast.success('Restricción eliminada');
+    } catch (error) {
+      console.error('Error removing restriction:', error);
+      toast.error('Error al eliminar la restricción');
+    }
   };
 
-  const handleRemoveIncompatibility = (memberId: string, incompatibleId: string) => {
-    setTeamMembers(prev => prev.map(m => {
-      if (m.id === memberId) {
-        return { ...m, incompatibleWith: m.incompatibleWith.filter(id => id !== incompatibleId) };
+  const handleRemoveIncompatibility = async (member: TeamMember, incompatibleId: string) => {
+    try {
+      // Remove from both members
+      await saveMember.mutateAsync({
+        ...member,
+        incompatibleWith: member.incompatibleWith.filter(id => id !== incompatibleId),
+      });
+      
+      const otherMember = teamMembers.find(m => m.id === incompatibleId);
+      if (otherMember) {
+        await saveMember.mutateAsync({
+          ...otherMember,
+          incompatibleWith: otherMember.incompatibleWith.filter(id => id !== member.id),
+        });
       }
-      if (m.id === incompatibleId) {
-        return { ...m, incompatibleWith: m.incompatibleWith.filter(id => id !== memberId) };
-      }
-      return m;
-    }));
+      
+      toast.success('Incompatibilidad eliminada');
+    } catch (error) {
+      console.error('Error removing incompatibility:', error);
+      toast.error('Error al eliminar la incompatibilidad');
+    }
   };
 
   const toggleCenter = (centerId: string) => {
@@ -114,6 +162,16 @@ export default function RestrictionsPage() {
         : [...prev, memberId]
     );
   };
+
+  if (isLoading) {
+    return (
+      <MainLayout title="Restricciones" subtitle="Gestión centralizada de restricciones e incompatibilidades">
+        <div className="flex items-center justify-center h-64">
+          <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
+        </div>
+      </MainLayout>
+    );
+  }
 
   return (
     <MainLayout 
@@ -206,7 +264,7 @@ export default function RestrictionsPage() {
                               {getCenterName(centerId)}
                               <button 
                                 className="ml-1 hover:bg-secondary rounded"
-                                onClick={() => handleRemoveCenterRestriction(member.id, centerId)}
+                                onClick={() => handleRemoveCenterRestriction(member, centerId)}
                               >
                                 <X className="h-3 w-3" />
                               </button>
@@ -302,7 +360,7 @@ export default function RestrictionsPage() {
                                 {getMemberName(memberId)}
                                 <button 
                                   className="ml-1 hover:bg-secondary rounded"
-                                  onClick={() => handleRemoveIncompatibility(member.id, memberId)}
+                                  onClick={() => handleRemoveIncompatibility(member, memberId)}
                                 >
                                   <X className="h-3 w-3" />
                                 </button>
@@ -420,8 +478,15 @@ export default function RestrictionsPage() {
             <Button variant="outline" onClick={() => setIsDialogOpen(false)}>
               Cancelar
             </Button>
-            <Button onClick={handleSaveRestrictions}>
-              Guardar Cambios
+            <Button onClick={handleSaveRestrictions} disabled={saveMember.isPending}>
+              {saveMember.isPending ? (
+                <>
+                  <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+                  Guardando...
+                </>
+              ) : (
+                'Guardar Cambios'
+              )}
             </Button>
           </DialogFooter>
         </DialogContent>

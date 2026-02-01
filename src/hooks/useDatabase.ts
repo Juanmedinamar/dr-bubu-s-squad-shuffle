@@ -227,6 +227,8 @@ export function useAssignments() {
       if (error) throw error;
       return data.map(mapDbToAssignment);
     },
+    staleTime: 0, // Always refetch to ensure fresh data
+    refetchOnMount: 'always', // Refetch when component mounts
   });
 }
 

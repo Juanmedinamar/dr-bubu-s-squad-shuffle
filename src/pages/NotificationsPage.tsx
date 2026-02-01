@@ -18,6 +18,7 @@ import {
   Loader2
 } from 'lucide-react';
 import { useTeamMembers, useCenters, useAssignments } from '@/hooks/useDatabase';
+import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
@@ -26,7 +27,8 @@ import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
 export default function NotificationsPage() {
-  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { role } = useAuth();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers(role);
   const { data: centers = [], isLoading: loadingCenters } = useCenters();
   const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
   

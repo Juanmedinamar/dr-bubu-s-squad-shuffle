@@ -5,9 +5,11 @@ import { TeamList } from '@/components/dashboard/TeamList';
 import { AlertsPanel } from '@/components/dashboard/AlertsPanel';
 import { Users, Building2, AlertTriangle, Loader2 } from 'lucide-react';
 import { useTeamMembers, useCenters } from '@/hooks/useDatabase';
+import { useAuth } from '@/hooks/useAuth';
 
 const Index = () => {
-  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { role } = useAuth();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers(role);
   const { data: centers = [], isLoading: loadingCenters } = useCenters();
   
   const isLoading = loadingMembers || loadingCenters;

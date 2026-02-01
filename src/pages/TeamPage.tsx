@@ -20,10 +20,12 @@ import { EditRestrictionsDialog } from '@/components/team/EditRestrictionsDialog
 import { AddEditMemberDialog } from '@/components/team/AddEditMemberDialog';
 import { DeleteMemberDialog } from '@/components/team/DeleteMemberDialog';
 import { useTeamMembers, useCenters, useSaveTeamMember, useDeleteTeamMember } from '@/hooks/useDatabase';
+import { useAuth } from '@/hooks/useAuth';
 import { toast } from 'sonner';
 
 export default function TeamPage() {
-  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { role } = useAuth();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers(role);
   const { data: centers = [], isLoading: loadingCenters } = useCenters();
   const saveMember = useSaveTeamMember();
   const deleteMember = useDeleteTeamMember();

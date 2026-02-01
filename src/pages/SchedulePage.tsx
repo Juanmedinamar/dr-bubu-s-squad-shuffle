@@ -22,11 +22,13 @@ import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wan
 import { DAYS_OF_WEEK, SHIFTS, Assignment } from '@/types';
 import { cn } from '@/lib/utils';
 import { useTeamMembers, useCenters, useAssignments, useOperations, useSaveAssignment, useDeleteAssignment } from '@/hooks/useDatabase';
+import { useAuth } from '@/hooks/useAuth';
 import { generateDemandSlots } from '@/data/mockData';
 import { toast } from 'sonner';
 
 export default function SchedulePage() {
-  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
+  const { role } = useAuth();
+  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers(role);
   const { data: centers = [], isLoading: loadingCenters } = useCenters();
   const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
   const { data: operations = [], isLoading: loadingOperations } = useOperations();

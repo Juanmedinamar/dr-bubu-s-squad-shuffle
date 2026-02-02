@@ -109,11 +109,28 @@ export function useAuth() {
     return { error };
   };
 
+  const resetPassword = async (email: string) => {
+    const redirectUrl = `${window.location.origin}/auth?reset=true`;
+    const { error } = await supabase.auth.resetPasswordForEmail(email, {
+      redirectTo: redirectUrl,
+    });
+    return { error };
+  };
+
+  const updatePassword = async (newPassword: string) => {
+    const { error } = await supabase.auth.updateUser({
+      password: newPassword,
+    });
+    return { error };
+  };
+
   return {
     ...authState,
     signIn,
     signUp,
     signOut,
+    resetPassword,
+    updatePassword,
     isAdmin: authState.role === 'admin',
     isStaff: authState.role === 'staff' || authState.role === 'admin',
   };

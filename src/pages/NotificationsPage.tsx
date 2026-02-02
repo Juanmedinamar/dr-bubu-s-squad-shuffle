@@ -6,6 +6,8 @@ import { Checkbox } from '@/components/ui/checkbox';
 import { Textarea } from '@/components/ui/textarea';
 import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
+import { Dialog, DialogContent, DialogHeader, DialogTitle, DialogDescription } from '@/components/ui/dialog';
+import { ScrollArea } from '@/components/ui/scroll-area';
 import { 
   Mail, 
   MessageSquare, 
@@ -15,7 +17,9 @@ import {
   FileText,
   ExternalLink,
   Download,
-  Loader2
+  Loader2,
+  Copy,
+  Check
 } from 'lucide-react';
 import { useTeamMembers, useCenters, useAssignments } from '@/hooks/useDatabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -36,6 +40,9 @@ export default function NotificationsPage() {
   const [customMessage, setCustomMessage] = useState('');
   const [sending, setSending] = useState(false);
   const [generatingPdf, setGeneratingPdf] = useState(false);
+  const [whatsappLinks, setWhatsappLinks] = useState<Array<{ name: string; phone: string; url: string; message: string }>>([]);
+  const [showWhatsappDialog, setShowWhatsappDialog] = useState(false);
+  const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
 
   const isLoading = loadingMembers || loadingCenters || loadingAssignments;
 
@@ -166,19 +173,35 @@ export default function NotificationsPage() {
       return;
     }
 
-    membersWithPhone.forEach((member, index) => {
+    // Generate links for each member
+    const links = membersWithPhone.map((member) => {
       const personalizedMessage = getPersonalizedMessage(member!.id);
       const messageText = encodeURIComponent(personalizedMessage);
       const phone = member!.phone!.replace(/[^\d+]/g, '').replace('+', '');
-      const whatsappUrl = `https://wa.me/${phone}?text=${messageText}`;
+      // Use web.whatsapp.com/send for better compatibility
+      const whatsappUrl = `https://web.whatsapp.com/send?phone=${phone}&text=${messageText}`;
       
-      setTimeout(() => {
-        window.open(whatsappUrl, '_blank');
-      }, index * 500);
+      return {
+        name: member!.name,
+        phone: member!.phone!,
+        url: whatsappUrl,
+        message: personalizedMessage
+      };
     });
 
-    toast.success(`Abriendo WhatsApp para ${membersWithPhone.length} personas`);
-    setSelectedMembers([]);
+    setWhatsappLinks(links);
+    setShowWhatsappDialog(true);
+  };
+
+  const handleCopyMessage = async (message: string, index: number) => {
+    try {
+      await navigator.clipboard.writeText(message);
+      setCopiedIndex(index);
+      toast.success('Mensaje copiado al portapapeles');
+      setTimeout(() => setCopiedIndex(null), 2000);
+    } catch (error) {
+      toast.error('Error al copiar el mensaje');
+    }
   };
 
   // Preview the message for the first selected member
@@ -384,6 +407,64 @@ export default function NotificationsPage() {
           </CardContent>
         </Card>
       </div>
+
+      {/* WhatsApp Links Dialog */}
+      <Dialog open={showWhatsappDialog} onOpenChange={setShowWhatsappDialog}>
+        <DialogContent className="max-w-2xl">
+          <DialogHeader>
+            <DialogTitle>Enlaces de WhatsApp</DialogTitle>
+            <DialogDescription>
+              Haz clic en cada enlace para abrir WhatsApp Web con el mensaje personalizado. 
+              También puedes copiar el mensaje para enviarlo manualmente.
+            </DialogDescription>
+          </DialogHeader>
+          <ScrollArea className="max-h-[400px] pr-4">
+            <div className="space-y-4">
+              {whatsappLinks.map((link, index) => (
+                <div key={index} className="rounded-lg border p-4 space-y-3">
+                  <div className="flex items-center justify-between">
+                    <div>
+                      <p className="font-medium">{link.name}</p>
+                      <p className="text-sm text-muted-foreground">{link.phone}</p>
+                    </div>
+                    <div className="flex gap-2">
+                      <Button
+                        variant="outline"
+                        size="sm"
+                        onClick={() => handleCopyMessage(link.message, index)}
+                      >
+                        {copiedIndex === index ? (
+                          <Check className="h-4 w-4 text-green-500" />
+                        ) : (
+                          <Copy className="h-4 w-4" />
+                        )}
+                      </Button>
+                      <Button
+                        size="sm"
+                        className="bg-green-600 hover:bg-green-700"
+                        asChild
+                      >
+                        <a href={link.url} target="_blank" rel="noopener noreferrer">
+                          <ExternalLink className="mr-2 h-4 w-4" />
+                          Abrir WhatsApp
+                        </a>
+                      </Button>
+                    </div>
+                  </div>
+                  <div className="rounded bg-muted/50 p-3 text-xs">
+                    <pre className="whitespace-pre-wrap font-sans">{link.message}</pre>
+                  </div>
+                </div>
+              ))}
+            </div>
+          </ScrollArea>
+          <div className="flex justify-end gap-2 pt-4">
+            <Button variant="outline" onClick={() => setShowWhatsappDialog(false)}>
+              Cerrar
+            </Button>
+          </div>
+        </DialogContent>
+      </Dialog>
     </MainLayout>
   );
 }

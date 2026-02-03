@@ -304,15 +304,15 @@ export default function NotificationsPage() {
                   <div className="rounded-lg border border-border bg-secondary/30 p-4">
                     <h4 className="font-medium mb-2">Envío por WhatsApp</h4>
                     <p className="text-sm text-muted-foreground mb-4">
-                      Se abrirá WhatsApp Web con el mensaje personalizado incluyendo los turnos de cada miembro.
+                      Se generarán los mensajes personalizados. Podrás abrirlos uno a uno o copiar el texto para enviar manualmente.
                     </p>
                     <Button 
                       onClick={handleSendWhatsApp} 
                       disabled={selectedMembers.length === 0}
                       className="w-full bg-green-600 hover:bg-green-700"
                     >
-                      <ExternalLink className="mr-2 h-4 w-4" />
-                      Abrir WhatsApp ({selectedMembers.length} seleccionados)
+                      <MessageSquare className="mr-2 h-4 w-4" />
+                      Preparar mensajes ({selectedMembers.length} seleccionados)
                     </Button>
                   </div>
                 </TabsContent>
@@ -412,10 +412,12 @@ export default function NotificationsPage() {
       <Dialog open={showWhatsappDialog} onOpenChange={setShowWhatsappDialog}>
         <DialogContent className="max-w-2xl">
           <DialogHeader>
-            <DialogTitle>Enlaces de WhatsApp</DialogTitle>
+            <DialogTitle>Mensajes de WhatsApp</DialogTitle>
             <DialogDescription>
-              Haz clic en cada enlace para abrir WhatsApp Web con el mensaje personalizado. 
-              También puedes copiar el mensaje para enviarlo manualmente.
+              <span className="block mb-2">
+                <strong>Recomendación:</strong> Usa el botón "Copiar" y pega el mensaje en WhatsApp manualmente para evitar bloqueos del navegador.
+              </span>
+              También puedes intentar abrir el enlace directo (puede no funcionar en todos los navegadores).
             </DialogDescription>
           </DialogHeader>
           <ScrollArea className="max-h-[400px] pr-4">
@@ -429,23 +431,39 @@ export default function NotificationsPage() {
                     </div>
                     <div className="flex gap-2">
                       <Button
-                        variant="outline"
+                        variant="default"
                         size="sm"
                         onClick={() => handleCopyMessage(link.message, index)}
+                        className="gap-2"
                       >
                         {copiedIndex === index ? (
-                          <Check className="h-4 w-4 text-green-500" />
+                          <>
+                            <Check className="h-4 w-4 text-green-500" />
+                            Copiado
+                          </>
                         ) : (
-                          <Copy className="h-4 w-4" />
+                          <>
+                            <Copy className="h-4 w-4" />
+                            Copiar mensaje
+                          </>
                         )}
                       </Button>
                       <Button
+                        variant="outline"
                         size="sm"
-                        className="bg-green-600 hover:bg-green-700"
-                        onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
+                        onClick={() => {
+                          // Use a simple link click approach instead of window.open
+                          const a = document.createElement('a');
+                          a.href = link.url;
+                          a.target = '_blank';
+                          a.rel = 'noopener noreferrer';
+                          document.body.appendChild(a);
+                          a.click();
+                          document.body.removeChild(a);
+                        }}
+                        title="Puede no funcionar en todos los navegadores"
                       >
-                        <ExternalLink className="mr-2 h-4 w-4" />
-                        Abrir WhatsApp
+                        <ExternalLink className="h-4 w-4" />
                       </Button>
                     </div>
                   </div>

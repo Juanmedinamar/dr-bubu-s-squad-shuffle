@@ -451,19 +451,16 @@ export default function NotificationsPage() {
                       <Button
                         variant="outline"
                         size="sm"
-                        onClick={() => {
-                          // Use a simple link click approach instead of window.open
-                          const a = document.createElement('a');
-                          a.href = link.url;
-                          a.target = '_blank';
-                          a.rel = 'noopener noreferrer';
-                          document.body.appendChild(a);
-                          a.click();
-                          document.body.removeChild(a);
-                        }}
-                        title="Puede no funcionar en todos los navegadores"
+                        asChild
                       >
-                        <ExternalLink className="h-4 w-4" />
+                        <a 
+                          href={link.url}
+                          target="_blank"
+                          rel="noopener noreferrer"
+                          title="Abrir en WhatsApp"
+                        >
+                          <ExternalLink className="h-4 w-4" />
+                        </a>
                       </Button>
                     </div>
                   </div>

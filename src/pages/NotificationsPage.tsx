@@ -442,12 +442,10 @@ export default function NotificationsPage() {
                       <Button
                         size="sm"
                         className="bg-green-600 hover:bg-green-700"
-                        asChild
+                        onClick={() => window.open(link.url, '_blank', 'noopener,noreferrer')}
                       >
-                        <a href={link.url} target="_blank" rel="noopener noreferrer">
-                          <ExternalLink className="mr-2 h-4 w-4" />
-                          Abrir WhatsApp
-                        </a>
+                        <ExternalLink className="mr-2 h-4 w-4" />
+                        Abrir WhatsApp
                       </Button>
                     </div>
                   </div>

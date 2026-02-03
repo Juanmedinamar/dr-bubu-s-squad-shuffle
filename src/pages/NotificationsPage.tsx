@@ -178,8 +178,8 @@ export default function NotificationsPage() {
       const personalizedMessage = getPersonalizedMessage(member!.id);
       const messageText = encodeURIComponent(personalizedMessage);
       const phone = member!.phone!.replace(/[^\d+]/g, '').replace('+', '');
-      // Use web.whatsapp.com/send for better compatibility
-      const whatsappUrl = `https://web.whatsapp.com/send?phone=${phone}&text=${messageText}`;
+      // Use wa.me which is the official WhatsApp API and doesn't block iframe connections
+      const whatsappUrl = `https://wa.me/${phone}?text=${messageText}`;
       
       return {
         name: member!.name,

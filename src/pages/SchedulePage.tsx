@@ -101,6 +101,11 @@ export default function SchedulePage() {
   };
 
   const handleOpenAssignDialog = (centerId: string, date: string, shift: 'morning' | 'afternoon') => {
+    const demand = getDemandForSlot(date, centerId, shift);
+    if (demand.operationsCount === 0) {
+      toast.error('No hay operaciones programadas en este turno');
+      return;
+    }
     setSelectedSlot({ centerId, date, shift });
     setIsAssignDialogOpen(true);
   };

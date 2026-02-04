@@ -3,7 +3,6 @@ import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
 import { Badge } from '@/components/ui/badge';
-import { Avatar, AvatarFallback } from '@/components/ui/avatar';
 import {
   Select,
   SelectContent,
@@ -11,42 +10,43 @@ import {
   SelectTrigger,
   SelectValue,
 } from '@/components/ui/select';
-import {
-  Dialog,
-  DialogContent,
-  DialogHeader,
-  DialogTitle,
-  DialogFooter,
-} from '@/components/ui/dialog';
-import { ChevronLeft, ChevronRight, Save, AlertTriangle, Users, X, Scissors, Wand2, Loader2 } from 'lucide-react';
-import { DAYS_OF_WEEK, SHIFTS, Assignment } from '@/types';
+import { ChevronLeft, ChevronRight, Wand2, Loader2 } from 'lucide-react';
+import { DAYS_OF_WEEK, SHIFTS } from '@/types';
 import { cn } from '@/lib/utils';
-import { useTeamMembers, useCenters, useAssignments, useOperations, useSaveAssignment, useDeleteAssignment } from '@/hooks/useDatabase';
+import { 
+  useTeamMembers, 
+  useCenters, 
+  useOperations, 
+  useSaveOperation,
+  useOperationAssignments, 
+  useSaveOperationAssignment, 
+  useDeleteOperationAssignment 
+} from '@/hooks/useDatabase';
 import { useAuth } from '@/hooks/useAuth';
-import { generateDemandSlots } from '@/data/mockData';
 import { toast } from 'sonner';
+import { ScheduleSlot } from '@/components/schedule/ScheduleSlot';
+import { AddOperationDialog } from '@/components/schedule/AddOperationDialog';
 
 export default function SchedulePage() {
   const { role } = useAuth();
   const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers(role);
   const { data: centers = [], isLoading: loadingCenters } = useCenters();
-  const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
   const { data: operations = [], isLoading: loadingOperations } = useOperations();
-  const saveAssignment = useSaveAssignment();
-  const deleteAssignment = useDeleteAssignment();
+  const { data: operationAssignments = [], isLoading: loadingOpAssignments } = useOperationAssignments();
+  const saveOperation = useSaveOperation();
+  const saveOpAssignment = useSaveOperationAssignment();
+  const deleteOpAssignment = useDeleteOperationAssignment();
   
   const [selectedCenter, setSelectedCenter] = useState<string>('all');
   const [weekOffset, setWeekOffset] = useState(0);
-  const [isAssignDialogOpen, setIsAssignDialogOpen] = useState(false);
-  const [selectedSlot, setSelectedSlot] = useState<{
+  const [addOpDialog, setAddOpDialog] = useState<{
+    open: boolean;
     centerId: string;
     date: string;
     shift: 'morning' | 'afternoon';
-  } | null>(null);
+  }>({ open: false, centerId: '', date: '', shift: 'morning' });
 
-  const isLoading = loadingMembers || loadingCenters || loadingAssignments || loadingOperations;
-
-  const demandSlots = generateDemandSlots(operations);
+  const isLoading = loadingMembers || loadingCenters || loadingOperations || loadingOpAssignments;
 
   const getWeekDates = () => {
     const today = new Date();
@@ -66,59 +66,20 @@ export default function SchedulePage() {
 
   const weekDates = getWeekDates();
 
-  const getAssignmentsForSlot = (date: string, centerId: string, shift: 'morning' | 'afternoon') => {
-    return assignments.filter(a => {
-      const matchesDate = a.date === date;
-      const matchesCenter = a.centerId === centerId;
-      const matchesShift = a.shift === shift || a.shift === 'full';
-      return matchesDate && matchesCenter && matchesShift;
-    });
+  const getOperationsForSlot = (date: string, centerId: string, shift: 'morning' | 'afternoon') => {
+    return operations.filter(op => 
+      op.date === date && 
+      op.centerId === centerId && 
+      op.shift === shift
+    );
   };
 
-  const getDemandForSlot = (date: string, centerId: string, shift: 'morning' | 'afternoon') => {
-    const slot = demandSlots.find(s => s.date === date && s.centerId === centerId && s.shift === shift);
-    return {
-      requiredAnesthetists: slot?.requiredAnesthetists || 0,
-      requiredNurses: slot?.requiredNurses || 0,
-      operationsCount: slot?.operations.length || 0,
-    };
-  };
-
-  const getAvailableMembers = (date: string, centerId: string, shift: 'morning' | 'afternoon') => {
-    const existingAssignments = assignments.filter(a => a.date === date);
-    const assignedMemberIds = existingAssignments.map(a => a.memberId);
-    
-    return teamMembers.filter(member => {
-      const isAlreadyAssigned = assignedMemberIds.includes(member.id);
-      const hasExcludedCenter = member.excludedCenters.includes(centerId);
-      const slotAssignments = getAssignmentsForSlot(date, centerId, shift);
-      const hasIncompatibility = slotAssignments.some(a => 
-        member.incompatibleWith.includes(a.memberId)
-      );
-      
-      return !isAlreadyAssigned && !hasExcludedCenter && !hasIncompatibility;
-    });
-  };
-
-  const handleOpenAssignDialog = (centerId: string, date: string, shift: 'morning' | 'afternoon') => {
-    const demand = getDemandForSlot(date, centerId, shift);
-    if (demand.operationsCount === 0) {
-      toast.error('No hay operaciones programadas en este turno');
-      return;
-    }
-    setSelectedSlot({ centerId, date, shift });
-    setIsAssignDialogOpen(true);
-  };
-
-  const handleAssignMember = async (memberId: string) => {
-    if (!selectedSlot) return;
-    
+  const handleAssignToOperation = async (operationId: string, memberId: string, role: 'anesthetist' | 'nurse') => {
     try {
-      await saveAssignment.mutateAsync({
+      await saveOpAssignment.mutateAsync({
+        operationId,
         memberId,
-        centerId: selectedSlot.centerId,
-        date: selectedSlot.date,
-        shift: selectedSlot.shift,
+        roleInOperation: role,
       });
       toast.success('Asignación creada');
     } catch (error: any) {
@@ -126,96 +87,101 @@ export default function SchedulePage() {
     }
   };
 
-  const handleRemoveAssignment = async (assignmentId: string) => {
+  const handleRemoveFromOperation = async (assignmentId: string) => {
     try {
-      await deleteAssignment.mutateAsync(assignmentId);
+      await deleteOpAssignment.mutateAsync(assignmentId);
       toast.success('Asignación eliminada');
     } catch (error: any) {
       toast.error('Error al eliminar: ' + error.message);
     }
   };
 
+  const handleAddOperation = (centerId: string, date: string, shift: 'morning' | 'afternoon') => {
+    setAddOpDialog({ open: true, centerId, date, shift });
+  };
+
+  const handleSaveOperation = async (data: any) => {
+    try {
+      await saveOperation.mutateAsync(data);
+      toast.success('Operación creada');
+    } catch (error: any) {
+      toast.error('Error al crear operación: ' + error.message);
+    }
+  };
+
   const handleAutoGenerate = async () => {
-    const newAssignments: Omit<Assignment, 'id'>[] = [];
-    const usedMembersByDate: Record<string, Set<string>> = {};
+    // Get all operations for the current week
+    const weekOperationIds = operations
+      .filter(op => weekDates.slice(0, 5).some(d => d.fullDate === op.date))
+      .map(op => op.id);
 
-    weekDates.slice(0, 5).forEach(({ fullDate }) => {
-      if (!usedMembersByDate[fullDate]) {
-        usedMembersByDate[fullDate] = new Set();
-      }
-
-      centers.forEach(center => {
-        (['morning', 'afternoon'] as const).forEach(shift => {
-          const demand = getDemandForSlot(fullDate, center.id, shift);
-          if (demand.requiredAnesthetists === 0) return;
-
-          const availableAnesthetists = teamMembers.filter(member => {
-            if (member.role !== 'anesthetist') return false;
-            if (usedMembersByDate[fullDate].has(member.id)) return false;
-            if (member.excludedCenters.includes(center.id)) return false;
-            
-            const slotAssignments = newAssignments.filter(a => 
-              a.date === fullDate && a.centerId === center.id && a.shift === shift
-            );
-            const hasIncompatibility = slotAssignments.some(a => 
-              member.incompatibleWith.includes(a.memberId)
-            );
-            return !hasIncompatibility;
-          });
-
-          const toAssign = availableAnesthetists.slice(0, demand.requiredAnesthetists);
-          toAssign.forEach(member => {
-            newAssignments.push({
-              memberId: member.id,
-              centerId: center.id,
-              date: fullDate,
-              shift,
-            });
-            usedMembersByDate[fullDate].add(member.id);
-          });
-
-          const availableNurses = teamMembers.filter(member => {
-            if (member.role !== 'nurse') return false;
-            if (usedMembersByDate[fullDate].has(member.id)) return false;
-            if (member.excludedCenters.includes(center.id)) return false;
-            return true;
-          });
-
-          const nursesToAssign = availableNurses.slice(0, demand.requiredNurses);
-          nursesToAssign.forEach(member => {
-            newAssignments.push({
-              memberId: member.id,
-              centerId: center.id,
-              date: fullDate,
-              shift,
-            });
-            usedMembersByDate[fullDate].add(member.id);
-          });
-        });
-      });
-    });
-
-    if (newAssignments.length === 0) {
+    if (weekOperationIds.length === 0) {
       toast.error('No hay operaciones programadas para esta semana');
       return;
     }
 
-    // Save all assignments to database
-    try {
-      for (const assignment of newAssignments) {
-        await saveAssignment.mutateAsync(assignment);
+    // Track used members per day to avoid double-booking
+    const usedMembersByDate: Record<string, Set<string>> = {};
+    let assignmentsCreated = 0;
+
+    for (const { fullDate } of weekDates.slice(0, 5)) {
+      if (!usedMembersByDate[fullDate]) {
+        usedMembersByDate[fullDate] = new Set();
       }
-      toast.success(`Planificación generada: ${newAssignments.length} asignaciones`);
-    } catch (error: any) {
-      toast.error('Error al generar: ' + error.message);
+
+      // Get operations for this day
+      const dayOperations = operations.filter(op => op.date === fullDate);
+
+      for (const operation of dayOperations) {
+        // Check how many anesthetists are already assigned
+        const currentAssignments = operationAssignments.filter(
+          a => a.operationId === operation.id && a.roleInOperation === 'anesthetist'
+        );
+        const needed = operation.requiredAnesthetists - currentAssignments.length;
+        
+        if (needed <= 0) continue;
+
+        // Find available anesthetists
+        const availableAnesthetists = teamMembers.filter(member => {
+          if (member.role !== 'anesthetist') return false;
+          if (usedMembersByDate[fullDate].has(member.id)) return false;
+          if (member.excludedCenters.includes(operation.centerId)) return false;
+          
+          // Check incompatibilities
+          const hasIncompatibility = currentAssignments.some(a => 
+            member.incompatibleWith.includes(a.memberId)
+          );
+          return !hasIncompatibility;
+        });
+
+        // Assign up to needed
+        const toAssign = availableAnesthetists.slice(0, needed);
+        for (const member of toAssign) {
+          try {
+            await saveOpAssignment.mutateAsync({
+              operationId: operation.id,
+              memberId: member.id,
+              roleInOperation: 'anesthetist',
+            });
+            usedMembersByDate[fullDate].add(member.id);
+            assignmentsCreated++;
+          } catch (error) {
+            console.error('Error assigning:', error);
+          }
+        }
+      }
+    }
+
+    if (assignmentsCreated > 0) {
+      toast.success(`Planificación generada: ${assignmentsCreated} asignaciones`);
+    } else {
+      toast.info('No se pudieron crear nuevas asignaciones');
     }
   };
 
-  const getCenterName = (centerId: string) => centers.find(c => c.id === centerId)?.name || '';
-
   if (isLoading) {
     return (
-      <MainLayout title="Planificación" subtitle="Asignación de turnos semanales por demanda">
+      <MainLayout title="Planificación" subtitle="Asignación de personal por operación">
         <div className="flex items-center justify-center h-64">
           <Loader2 className="h-8 w-8 animate-spin text-muted-foreground" />
         </div>
@@ -226,7 +192,7 @@ export default function SchedulePage() {
   return (
     <MainLayout 
       title="Planificación" 
-      subtitle="Asignación de turnos semanales por demanda"
+      subtitle="Asignación de personal por operación"
     >
       {/* Controls */}
       <div className="mb-6 flex flex-col gap-4 sm:flex-row sm:items-center sm:justify-between">
@@ -301,7 +267,7 @@ export default function SchedulePage() {
                         <th 
                           key={day} 
                           className={cn(
-                            'p-2 text-center rounded-lg min-w-[140px]',
+                            'p-2 text-center rounded-lg min-w-[160px]',
                             index === new Date().getDay() - 1 ? 'bg-primary text-primary-foreground' : 'bg-secondary'
                           )}
                         >
@@ -318,85 +284,22 @@ export default function SchedulePage() {
                           <Badge variant="outline">{SHIFTS[shift]}</Badge>
                         </td>
                         {weekDates.slice(0, 5).map(({ fullDate }) => {
-                          const slotAssignments = getAssignmentsForSlot(fullDate, center.id, shift);
-                          const demand = getDemandForSlot(fullDate, center.id, shift);
-                          const assignedAnesthetists = slotAssignments.filter(a => 
-                            teamMembers.find(m => m.id === a.memberId)?.role === 'anesthetist'
-                          ).length;
-                          const isCovered = assignedAnesthetists >= demand.requiredAnesthetists;
+                          const slotOperations = getOperationsForSlot(fullDate, center.id, shift);
                           
                           return (
                             <td key={fullDate} className="p-2">
-                              <div 
-                                className={cn(
-                                  'min-h-[100px] rounded-lg border p-2 transition-colors',
-                                  demand.operationsCount > 0 
-                                    ? isCovered 
-                                      ? 'border-success/50 bg-success/5' 
-                                      : 'border-warning/50 bg-warning/5'
-                                    : 'border-dashed border-border',
-                                  'hover:border-primary cursor-pointer'
-                                )}
-                                onClick={() => handleOpenAssignDialog(center.id, fullDate, shift)}
-                              >
-                                {/* Demand header */}
-                                {demand.operationsCount > 0 && (
-                                  <div className="flex items-center justify-between text-xs mb-2 pb-2 border-b">
-                                    <div className="flex items-center gap-1">
-                                      <Scissors className="h-3 w-3 text-muted-foreground" />
-                                      <span>{demand.operationsCount} ops</span>
-                                    </div>
-                                    <div className={cn(
-                                      'flex items-center gap-1 font-medium',
-                                      isCovered ? 'text-success' : 'text-warning'
-                                    )}>
-                                      <Users className="h-3 w-3" />
-                                      <span>{assignedAnesthetists}/{demand.requiredAnesthetists}</span>
-                                    </div>
-                                  </div>
-                                )}
-                                
-                                {/* Assignments */}
-                                <div className="space-y-1">
-                                  {slotAssignments.map((assignment) => {
-                                    const member = teamMembers.find(m => m.id === assignment.memberId);
-                                    if (!member) return null;
-                                    
-                                    return (
-                                      <div 
-                                        key={assignment.id}
-                                        className={cn(
-                                          'rounded p-1.5 text-xs flex items-center justify-between group',
-                                          member.role === 'anesthetist' 
-                                            ? 'bg-anesthetist-light text-anesthetist' 
-                                            : 'bg-nurse-light text-nurse'
-                                        )}
-                                        onClick={(e) => e.stopPropagation()}
-                                      >
-                                        <div className="flex items-center gap-1.5 truncate">
-                                          <Avatar className="h-5 w-5">
-                                            <AvatarFallback className="text-[10px]">
-                                              {member.name.split(' ').map(n => n[0]).join('')}
-                                            </AvatarFallback>
-                                          </Avatar>
-                                          <span className="truncate">{member.name}</span>
-                                        </div>
-                                        <Button
-                                          variant="ghost"
-                                          size="icon"
-                                          className="h-4 w-4 opacity-0 group-hover:opacity-100"
-                                          onClick={(e) => {
-                                            e.stopPropagation();
-                                            handleRemoveAssignment(assignment.id);
-                                          }}
-                                        >
-                                          <X className="h-3 w-3" />
-                                        </Button>
-                                      </div>
-                                    );
-                                  })}
-                                </div>
-                              </div>
+                              <ScheduleSlot
+                                date={fullDate}
+                                shift={shift}
+                                centerId={center.id}
+                                centerColor={center.color}
+                                operations={slotOperations}
+                                teamMembers={teamMembers}
+                                operationAssignments={operationAssignments}
+                                onAssignToOperation={handleAssignToOperation}
+                                onRemoveFromOperation={handleRemoveFromOperation}
+                                onAddOperation={() => handleAddOperation(center.id, fullDate, shift)}
+                              />
                             </td>
                           );
                         })}
@@ -410,94 +313,16 @@ export default function SchedulePage() {
         ))}
       </div>
 
-      {/* Assign Member Dialog */}
-      <Dialog open={isAssignDialogOpen} onOpenChange={setIsAssignDialogOpen}>
-        <DialogContent className="max-w-md">
-          <DialogHeader>
-            <DialogTitle>
-              Asignar personal - {selectedSlot && getCenterName(selectedSlot.centerId)}
-            </DialogTitle>
-          </DialogHeader>
-          
-          {selectedSlot && (
-            <div className="space-y-4">
-              <div className="text-sm text-muted-foreground">
-                {selectedSlot.date} - {SHIFTS[selectedSlot.shift]}
-              </div>
-
-              {/* Current assignments */}
-              {getAssignmentsForSlot(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).length > 0 && (
-                <div>
-                  <p className="text-sm font-medium mb-2">Asignados:</p>
-                  <div className="space-y-1">
-                    {getAssignmentsForSlot(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map(a => {
-                      const member = teamMembers.find(m => m.id === a.memberId);
-                      if (!member) return null;
-                      return (
-                        <div key={a.id} className="flex items-center justify-between p-2 rounded bg-secondary">
-                          <span className="text-sm">{member.name}</span>
-                          <Button
-                            variant="ghost"
-                            size="icon"
-                            className="h-6 w-6"
-                            onClick={() => handleRemoveAssignment(a.id)}
-                          >
-                            <X className="h-4 w-4" />
-                          </Button>
-                        </div>
-                      );
-                    })}
-                  </div>
-                </div>
-              )}
-
-              {/* Available members */}
-              <div>
-                <p className="text-sm font-medium mb-2">Disponibles:</p>
-                <div className="space-y-1 max-h-[300px] overflow-y-auto">
-                  {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).map(member => (
-                    <div
-                      key={member.id}
-                      className={cn(
-                        'flex items-center justify-between p-2 rounded cursor-pointer hover:bg-secondary/80',
-                        member.role === 'anesthetist' ? 'bg-anesthetist-light/50' : 'bg-nurse-light/50'
-                      )}
-                      onClick={() => handleAssignMember(member.id)}
-                    >
-                      <div className="flex items-center gap-2">
-                        <Avatar className="h-6 w-6">
-                          <AvatarFallback className={cn(
-                            'text-[10px] text-white',
-                            member.role === 'anesthetist' ? 'bg-anesthetist' : 'bg-nurse'
-                          )}>
-                            {member.name.split(' ').map(n => n[0]).join('').slice(0, 2)}
-                          </AvatarFallback>
-                        </Avatar>
-                        <span className="text-sm">{member.name}</span>
-                      </div>
-                      <Badge variant="outline" className="text-xs">
-                        {member.role === 'anesthetist' ? 'Anest.' : 'Enf.'}
-                      </Badge>
-                    </div>
-                  ))}
-                  {getAvailableMembers(selectedSlot.date, selectedSlot.centerId, selectedSlot.shift).length === 0 && (
-                    <div className="flex items-center gap-2 p-3 text-muted-foreground text-sm">
-                      <AlertTriangle className="h-4 w-4" />
-                      No hay personal disponible
-                    </div>
-                  )}
-                </div>
-              </div>
-            </div>
-          )}
-
-          <DialogFooter>
-            <Button variant="outline" onClick={() => setIsAssignDialogOpen(false)}>
-              Cerrar
-            </Button>
-          </DialogFooter>
-        </DialogContent>
-      </Dialog>
+      {/* Add Operation Dialog */}
+      <AddOperationDialog
+        open={addOpDialog.open}
+        onOpenChange={(open) => setAddOpDialog(prev => ({ ...prev, open }))}
+        centers={centers}
+        defaultCenterId={addOpDialog.centerId}
+        defaultDate={addOpDialog.date}
+        defaultShift={addOpDialog.shift}
+        onSave={handleSaveOperation}
+      />
     </MainLayout>
   );
 }

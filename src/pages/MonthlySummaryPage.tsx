@@ -11,7 +11,8 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useMonthlyOperationsSummary } from '@/hooks/useDatabase';
 import { SPECIALTIES } from '@/types';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown } from 'lucide-react';
+import { ChevronDown, ChevronLeft, ChevronRight, Download, User, Activity, Clock, Building2 } from 'lucide-react';
+import React from 'react';
 
 export default function MonthlySummaryPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -84,7 +85,8 @@ export default function MonthlySummaryPage() {
               </TableRow>
             ) : (
               members.map((member: any) => (
-                <TableRow key={member.id}>
+                <React.Fragment key={member.id}>
+                <TableRow>
                   <TableCell className="font-medium">
                     <div className="flex items-center gap-2">
                       <User className="h-4 w-4 text-muted-foreground" />
@@ -132,7 +134,7 @@ export default function MonthlySummaryPage() {
                   </TableCell>
                 </TableRow>
                 {member.operations && member.operations.length > 0 && (
-                  <TableRow>
+                  <TableRow className="bg-muted/30">
                     <TableCell colSpan={5} className="p-0">
                       <Collapsible>
                         <CollapsibleTrigger className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground w-full">
@@ -179,6 +181,7 @@ export default function MonthlySummaryPage() {
                     </TableCell>
                   </TableRow>
                 )}
+                </React.Fragment>
               ))
             )}
           </TableBody>

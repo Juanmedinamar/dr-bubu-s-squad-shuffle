@@ -385,6 +385,14 @@ export function useMonthlyOperationsSummary(year: number, month: number) {
           totalDurationMinutes: totalDuration,
           bySpecialty,
           byCenter,
+          operations: memberOps.map((op: any) => ({
+            id: op.id,
+            date: op.date,
+            shift: op.shift,
+            specialty: op.specialty,
+            duration: op.estimated_duration,
+            centerName: centers.find((c: any) => c.id === op.center_id)?.name || 'Desconocido',
+          })),
         };
       });
 

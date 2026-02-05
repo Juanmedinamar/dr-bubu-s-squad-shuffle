@@ -2,15 +2,16 @@ import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { Badge } from '@/components/ui/badge';
 import { DAYS_OF_WEEK } from '@/types';
 import { cn } from '@/lib/utils';
-import { useAssignments, useTeamMembers, useCenters } from '@/hooks/useDatabase';
+import { useOperations, useOperationAssignments, useTeamMembers, useCenters } from '@/hooks/useDatabase';
 import { Loader2 } from 'lucide-react';
 
 export function WeeklyOverview() {
-  const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
+  const { data: operations = [], isLoading: loadingOperations } = useOperations();
+  const { data: operationAssignments = [], isLoading: loadingOpAssignments } = useOperationAssignments();
   const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers();
   const { data: centers = [], isLoading: loadingCenters } = useCenters();
 
-  const isLoading = loadingAssignments || loadingMembers || loadingCenters;
+  const isLoading = loadingOperations || loadingOpAssignments || loadingMembers || loadingCenters;
 
   const getAssignmentsForDay = (dayIndex: number) => {
     // Get today's date and calculate the date for the given day
@@ -21,7 +22,24 @@ export function WeeklyOverview() {
     targetDate.setDate(monday.getDate() + dayIndex);
     const dateStr = targetDate.toISOString().split('T')[0];
 
-    return assignments.filter(a => a.date === dateStr);
+    // Get operations for this day
+    const dayOperations = operations.filter(op => op.date === dateStr);
+    
+    // Get all assignments for these operations
+    const dayAssignments: { memberId: string; centerId: string; operationId: string }[] = [];
+    
+    dayOperations.forEach(op => {
+      const opAssignments = operationAssignments.filter(a => a.operationId === op.id);
+      opAssignments.forEach(a => {
+        dayAssignments.push({
+          memberId: a.memberId,
+          centerId: op.centerId,
+          operationId: op.id,
+        });
+      });
+    });
+    
+    return dayAssignments;
   };
 
   if (isLoading) {
@@ -70,7 +88,7 @@ export function WeeklyOverview() {
                     
                     return (
                       <div
-                        key={assignment.id}
+                        key={`${assignment.operationId}-${assignment.memberId}`}
                         className="rounded-md border border-border bg-card p-2 text-xs shadow-sm transition-all hover:shadow-md"
                         style={{ borderLeftColor: center.color, borderLeftWidth: '3px' }}
                       >

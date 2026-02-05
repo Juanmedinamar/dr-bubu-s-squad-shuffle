@@ -1,7 +1,7 @@
-import { useState } from 'react';
+import React, { useState } from 'react';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, Download, User, Activity, Clock, Building2 } from 'lucide-react';
+import { ChevronLeft, ChevronRight, ChevronDown, Download, User, Activity, Clock, Building2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,8 +11,6 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useMonthlyOperationsSummary } from '@/hooks/useDatabase';
 import { SPECIALTIES } from '@/types';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
-import { ChevronDown, ChevronLeft, ChevronRight, Download, User, Activity, Clock, Building2 } from 'lucide-react';
-import React from 'react';
 
 export default function MonthlySummaryPage() {
   const [currentDate, setCurrentDate] = useState(new Date());

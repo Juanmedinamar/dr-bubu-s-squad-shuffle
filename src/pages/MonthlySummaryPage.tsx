@@ -1,7 +1,7 @@
 import React, { useState } from 'react';
 import { format, startOfMonth, endOfMonth, addMonths, subMonths } from 'date-fns';
 import { es } from 'date-fns/locale';
-import { ChevronLeft, ChevronRight, ChevronDown, Download, User, Activity, Clock, Building2 } from 'lucide-react';
+ import { ChevronLeft, ChevronRight, ChevronDown, Download, FileText, User, Activity, Clock, Building2, Loader2 } from 'lucide-react';
 import { MainLayout } from '@/components/layout/MainLayout';
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from '@/components/ui/card';
 import { Button } from '@/components/ui/button';
@@ -11,9 +11,12 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@
 import { useMonthlyOperationsSummary } from '@/hooks/useDatabase';
 import { SPECIALTIES } from '@/types';
 import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+ import { supabase } from '@/integrations/supabase/client';
+ import { toast } from 'sonner';
 
 export default function MonthlySummaryPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
+   const [isGeneratingPdf, setIsGeneratingPdf] = useState(false);
   const year = currentDate.getFullYear();
   const month = currentDate.getMonth() + 1;
 
@@ -33,6 +36,42 @@ export default function MonthlySummaryPage() {
   const anesthetists = summary?.allMembers.filter((m: any) => m.role === 'anesthetist') || [];
   const nurses = summary?.allMembers.filter((m: any) => m.role === 'nurse') || [];
 
+   const downloadPdf = async () => {
+     if (!summary) return;
+     
+     setIsGeneratingPdf(true);
+     try {
+       const { data: sessionData } = await supabase.auth.getSession();
+       const token = sessionData?.session?.access_token;
+       
+       if (!token) {
+         toast.error('Debes iniciar sesión para descargar el PDF');
+         return;
+       }
+ 
+       const { data, error } = await supabase.functions.invoke('generate-monthly-summary-pdf', {
+         body: { year, month },
+       });
+ 
+       if (error) throw error;
+ 
+       if (data?.pdf) {
+         const link = document.createElement('a');
+         link.href = data.pdf;
+         link.download = data.filename || `resumen-mensual-${year}-${month}.pdf`;
+         document.body.appendChild(link);
+         link.click();
+         document.body.removeChild(link);
+         toast.success('PDF descargado correctamente');
+       }
+     } catch (err: any) {
+       console.error('Error generating PDF:', err);
+       toast.error(err.message || 'Error al generar el PDF');
+     } finally {
+       setIsGeneratingPdf(false);
+     }
+   };
+ 
   const exportToCSV = () => {
     if (!summary) return;
     
@@ -205,6 +244,14 @@ export default function MonthlySummaryPage() {
             <Download className="h-4 w-4 mr-2" />
             Exportar CSV
           </Button>
+         <Button onClick={downloadPdf} disabled={!summary || isGeneratingPdf}>
+           {isGeneratingPdf ? (
+             <Loader2 className="h-4 w-4 mr-2 animate-spin" />
+           ) : (
+             <FileText className="h-4 w-4 mr-2" />
+           )}
+           Descargar PDF
+         </Button>
         </div>
 
         {/* Month Navigator */}

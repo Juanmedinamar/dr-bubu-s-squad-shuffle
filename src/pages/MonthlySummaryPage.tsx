@@ -10,6 +10,8 @@ import { Tabs, TabsContent, TabsList, TabsTrigger } from '@/components/ui/tabs';
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from '@/components/ui/table';
 import { useMonthlyOperationsSummary } from '@/hooks/useDatabase';
 import { SPECIALTIES } from '@/types';
+import { Collapsible, CollapsibleContent, CollapsibleTrigger } from '@/components/ui/collapsible';
+import { ChevronDown } from 'lucide-react';
 
 export default function MonthlySummaryPage() {
   const [currentDate, setCurrentDate] = useState(new Date());
@@ -26,6 +28,8 @@ export default function MonthlySummaryPage() {
     const mins = minutes % 60;
     return hours > 0 ? `${hours}h ${mins}m` : `${mins}m`;
   };
+
+  const formatShift = (shift: string) => shift === 'morning' ? 'Mañana' : 'Tarde';
 
   const anesthetists = summary?.allMembers.filter((m: any) => m.role === 'anesthetist') || [];
   const nurses = summary?.allMembers.filter((m: any) => m.role === 'nurse') || [];
@@ -127,6 +131,54 @@ export default function MonthlySummaryPage() {
                     </div>
                   </TableCell>
                 </TableRow>
+                {member.operations && member.operations.length > 0 && (
+                  <TableRow>
+                    <TableCell colSpan={5} className="p-0">
+                      <Collapsible>
+                        <CollapsibleTrigger className="flex items-center gap-2 px-4 py-2 text-sm text-muted-foreground hover:text-foreground w-full">
+                          <ChevronDown className="h-4 w-4" />
+                          Ver detalle de operaciones ({member.operations.length})
+                        </CollapsibleTrigger>
+                        <CollapsibleContent>
+                          <div className="px-4 pb-4">
+                            <Table>
+                              <TableHeader>
+                                <TableRow>
+                                  <TableHead>Fecha</TableHead>
+                                  <TableHead>Turno</TableHead>
+                                  <TableHead>Centro</TableHead>
+                                  <TableHead>Especialidad</TableHead>
+                                  <TableHead>Duración</TableHead>
+                                </TableRow>
+                              </TableHeader>
+                              <TableBody>
+                                {member.operations
+                                  .sort((a: any, b: any) => new Date(a.date).getTime() - new Date(b.date).getTime())
+                                  .map((op: any) => (
+                                    <TableRow key={op.id}>
+                                      <TableCell>
+                                        {format(new Date(op.date), 'dd MMM yyyy', { locale: es })}
+                                      </TableCell>
+                                      <TableCell>
+                                        <Badge variant={op.shift === 'morning' ? 'default' : 'secondary'}>
+                                          {formatShift(op.shift)}
+                                        </Badge>
+                                      </TableCell>
+                                      <TableCell>{op.centerName}</TableCell>
+                                      <TableCell>
+                                        {SPECIALTIES[op.specialty as keyof typeof SPECIALTIES] || op.specialty}
+                                      </TableCell>
+                                      <TableCell>{formatDuration(op.duration)}</TableCell>
+                                    </TableRow>
+                                  ))}
+                              </TableBody>
+                            </Table>
+                          </div>
+                        </CollapsibleContent>
+                      </Collapsible>
+                    </TableCell>
+                  </TableRow>
+                )}
               ))
             )}
           </TableBody>

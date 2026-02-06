@@ -81,7 +81,7 @@ export default function NotificationsPage() {
     const member = teamMembers.find(m => m.id === memberId);
     if (!member) return '';
     
-    const schedule = formatMemberSchedule(member, assignments, centers, 0);
+    const schedule = formatMemberScheduleFromOperations(member, operations, operationAssignments, centers, 0);
     const greeting = customMessage || `Hola ${member.name.split(' ')[0]},\n\nTe enviamos tu planificación de turnos para la próxima semana.`;
     
     return `${greeting}\n\n${schedule}\n\nSaludos,\nEquipo del Dr. Bubu`;
@@ -94,7 +94,8 @@ export default function NotificationsPage() {
         body: {
           teamMembers,
           centers,
-          assignments,
+          operations,
+          operationAssignments,
           weekStart,
           weekEnd,
         },

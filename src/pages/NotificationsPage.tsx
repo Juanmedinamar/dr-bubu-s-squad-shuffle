@@ -35,7 +35,8 @@ export default function NotificationsPage() {
   const { role } = useAuth();
   const { data: teamMembers = [], isLoading: loadingMembers, refetch: refetchMembers } = useTeamMembers(role);
   const { data: centers = [], isLoading: loadingCenters, refetch: refetchCenters } = useCenters();
-  const { data: assignments = [], isLoading: loadingAssignments, refetch: refetchAssignments, dataUpdatedAt } = useAssignments();
+  const { data: operations = [], isLoading: loadingOperations, refetch: refetchOperations, dataUpdatedAt } = useOperations();
+  const { data: operationAssignments = [], isLoading: loadingOpAssignments, refetch: refetchOpAssignments } = useOperationAssignments();
   
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [customMessage, setCustomMessage] = useState('');
@@ -46,11 +47,11 @@ export default function NotificationsPage() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const isLoading = loadingMembers || loadingCenters || loadingAssignments;
+  const isLoading = loadingMembers || loadingCenters || loadingOperations || loadingOpAssignments;
 
   const handleRefreshData = async () => {
     setIsRefreshing(true);
-    await Promise.all([refetchMembers(), refetchCenters(), refetchAssignments()]);
+    await Promise.all([refetchMembers(), refetchCenters(), refetchOperations(), refetchOpAssignments()]);
     setIsRefreshing(false);
     toast.success('Datos actualizados');
   };

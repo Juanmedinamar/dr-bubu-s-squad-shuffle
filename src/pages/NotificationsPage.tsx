@@ -275,7 +275,6 @@ export default function NotificationsPage() {
                     Descargar PDF
                   </Button>
                 </div>
-                </Button>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">

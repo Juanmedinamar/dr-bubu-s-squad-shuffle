@@ -422,7 +422,7 @@ export default function NotificationsPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{member.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {memberAssignments.length} turnos · {member.email || member.phone || 'Sin contacto'}
+                        {memberOperationCount} operaciones · {member.email || member.phone || 'Sin contacto'}
                       </p>
                     </div>
                     {isSelected && (

@@ -36,18 +36,27 @@ interface Center {
   name: string;
 }
 
-interface Assignment {
+interface Operation {
   id: string;
-  memberId: string;
   centerId: string;
   date: string;
-  shift: 'morning' | 'afternoon' | 'full';
+  shift: 'morning' | 'afternoon';
+  specialty: string;
+  type: string;
+}
+
+interface OperationAssignment {
+  id: string;
+  operationId: string;
+  memberId: string;
+  roleInOperation: string;
 }
 
 interface ScheduleRequest {
   teamMembers: TeamMember[];
   centers: Center[];
-  assignments: Assignment[];
+  operations: Operation[];
+  operationAssignments: OperationAssignment[];
   weekStart: string;
   weekEnd: string;
 }
@@ -85,8 +94,11 @@ function validateRequest(data: ScheduleRequest): string | null {
   if (!Array.isArray(data.centers) || data.centers.length > 50) {
     return 'centers debe ser un array con máximo 50 elementos';
   }
-  if (!Array.isArray(data.assignments) || data.assignments.length > 1000) {
-    return 'assignments debe ser un array con máximo 1000 elementos';
+  if (!Array.isArray(data.operations) || data.operations.length > 1000) {
+    return 'operations debe ser un array con máximo 1000 elementos';
+  }
+  if (!Array.isArray(data.operationAssignments) || data.operationAssignments.length > 5000) {
+    return 'operationAssignments debe ser un array con máximo 5000 elementos';
   }
 
   // Validate dates
@@ -120,22 +132,32 @@ function validateRequest(data: ScheduleRequest): string | null {
     }
   }
 
-  // Validate assignments
-  for (const assignment of data.assignments) {
-    if (!validateUUID(assignment.id)) {
-      return `ID de asignación inválido: ${assignment.id}`;
+  // Validate operations
+  for (const op of data.operations) {
+    if (!validateUUID(op.id)) {
+      return `ID de operación inválido: ${op.id}`;
     }
-    if (!validateUUID(assignment.memberId)) {
-      return `ID de miembro en asignación inválido: ${assignment.memberId}`;
+    if (!validateUUID(op.centerId)) {
+      return `ID de centro en operación inválido: ${op.centerId}`;
     }
-    if (!validateUUID(assignment.centerId)) {
-      return `ID de centro en asignación inválido: ${assignment.centerId}`;
+    if (!validateDate(op.date)) {
+      return `Fecha de operación inválida: ${op.date}`;
     }
-    if (!validateDate(assignment.date)) {
-      return `Fecha de asignación inválida: ${assignment.date}`;
+    if (!['morning', 'afternoon'].includes(op.shift)) {
+      return `Turno de operación inválido: ${op.shift}`;
     }
-    if (!['morning', 'afternoon', 'full'].includes(assignment.shift)) {
-      return `Turno de asignación inválido: ${assignment.shift}`;
+  }
+
+  // Validate operation assignments
+  for (const oa of data.operationAssignments) {
+    if (!validateUUID(oa.id)) {
+      return `ID de asignación de operación inválido: ${oa.id}`;
+    }
+    if (!validateUUID(oa.operationId)) {
+      return `ID de operación en asignación inválido: ${oa.operationId}`;
+    }
+    if (!validateUUID(oa.memberId)) {
+      return `ID de miembro en asignación inválido: ${oa.memberId}`;
     }
   }
 
@@ -217,8 +239,8 @@ const handler = async (req: Request): Promise<Response> => {
       );
     }
 
-    const { teamMembers, centers, assignments, weekStart, weekEnd } = requestData;
-    console.log(`Generating PDF for week ${weekStart} to ${weekEnd}, ${assignments.length} assignments`);
+    const { teamMembers, centers, operations, operationAssignments, weekStart, weekEnd } = requestData;
+    console.log(`Generating PDF for week ${weekStart} to ${weekEnd}, ${operations.length} operations, ${operationAssignments.length} assignments`);
 
     const doc = new jsPDF();
     
@@ -238,9 +260,9 @@ const handler = async (req: Request): Promise<Response> => {
     const weekDates = getWeekDates(weekStart);
     
     for (const { dateStr, dayName } of weekDates) {
-      const dayAssignments = assignments.filter(a => a.date === dateStr);
+      const dayOperations = operations.filter(op => op.date === dateStr);
       
-      if (dayAssignments.length === 0) continue;
+      if (dayOperations.length === 0) continue;
       
       // Check if we need a new page
       if (yPos > pageHeight - 40) {
@@ -255,15 +277,15 @@ const handler = async (req: Request): Promise<Response> => {
       yPos += lineHeight + 2;
       
       // Group by center
-      const centerGroups = new Map<string, Assignment[]>();
-      dayAssignments.forEach(a => {
-        if (!centerGroups.has(a.centerId)) {
-          centerGroups.set(a.centerId, []);
+      const centerGroups = new Map<string, Operation[]>();
+      dayOperations.forEach(op => {
+        if (!centerGroups.has(op.centerId)) {
+          centerGroups.set(op.centerId, []);
         }
-        centerGroups.get(a.centerId)!.push(a);
+        centerGroups.get(op.centerId)!.push(op);
       });
       
-      for (const [centerId, centerAssignments] of centerGroups) {
+      for (const [centerId, centerOps] of centerGroups) {
         const center = centers.find(c => c.id === centerId);
         if (!center) continue;
         
@@ -278,23 +300,45 @@ const handler = async (req: Request): Promise<Response> => {
         doc.text(`  ${center.name}`, 15, yPos);
         yPos += lineHeight;
         
-        doc.setFont("helvetica", "normal");
-        doc.setFontSize(10);
-        
-        for (const assignment of centerAssignments) {
-          const member = teamMembers.find(m => m.id === assignment.memberId);
-          if (!member) continue;
-          
+        for (const operation of centerOps) {
           // Check if we need a new page
           if (yPos > pageHeight - 10) {
             doc.addPage();
             yPos = 20;
           }
           
-          const role = member.role === 'anesthetist' ? 'Anestesista' : 'Enfermero/a';
-          const shiftName = SHIFTS[assignment.shift];
-          doc.text(`      • ${member.name} (${role}) - ${shiftName}`, 15, yPos);
+          // Operation info
+          doc.setFontSize(10);
+          doc.setFont("helvetica", "bold");
+          const shiftName = SHIFTS[operation.shift] || operation.shift;
+          doc.text(`    • ${operation.specialty} - ${operation.type} (${shiftName})`, 15, yPos);
           yPos += lineHeight;
+          
+          // Assigned staff
+          const opAssignments = operationAssignments.filter(oa => oa.operationId === operation.id);
+          doc.setFont("helvetica", "normal");
+          
+          for (const oa of opAssignments) {
+            const member = teamMembers.find(m => m.id === oa.memberId);
+            if (!member) continue;
+            
+            // Check if we need a new page
+            if (yPos > pageHeight - 10) {
+              doc.addPage();
+              yPos = 20;
+            }
+            
+            const role = member.role === 'anesthetist' ? 'Anestesista' : 'Enfermero/a';
+            doc.text(`        - ${member.name} (${role})`, 15, yPos);
+            yPos += lineHeight;
+          }
+          
+          if (opAssignments.length === 0) {
+            doc.setTextColor(150, 150, 150);
+            doc.text(`        (Sin personal asignado)`, 15, yPos);
+            doc.setTextColor(0, 0, 0);
+            yPos += lineHeight;
+          }
         }
         yPos += 2;
       }

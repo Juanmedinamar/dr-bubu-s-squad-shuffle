@@ -19,15 +19,21 @@ function validateString(str: string, maxLength: number): boolean {
   return typeof str === 'string' && str.length > 0 && str.length <= maxLength;
 }
 
-function sanitizeHtml(input: string): string {
-  // Remove script tags and on* event handlers
+// Escape HTML entities to prevent XSS - converts all user input to safe text
+function escapeHtml(input: string): string {
   return input
-    .replace(/<script\b[^<]*(?:(?!<\/script>)<[^<]*)*<\/script>/gi, '')
-    .replace(/on\w+\s*=\s*["'][^"']*["']/gi, '')
-    .replace(/<iframe\b[^<]*(?:(?!<\/iframe>)<[^<]*)*<\/iframe>/gi, '')
-    .replace(/<object\b[^<]*(?:(?!<\/object>)<[^<]*)*<\/object>/gi, '')
-    .replace(/<embed\b[^>]*>/gi, '')
-    .replace(/<link\b[^>]*>/gi, '');
+    .replace(/&/g, '&amp;')
+    .replace(/</g, '&lt;')
+    .replace(/>/g, '&gt;')
+    .replace(/"/g, '&quot;')
+    .replace(/'/g, '&#039;');
+}
+
+// Apply markdown-like formatting AFTER escaping (safe: works on escaped text)
+function formatMessage(escapedText: string): string {
+  return escapedText
+    .replace(/\n/g, '<br>')
+    .replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
 }
 
 interface Recipient {

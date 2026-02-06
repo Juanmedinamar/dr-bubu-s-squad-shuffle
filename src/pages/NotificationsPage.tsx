@@ -393,8 +393,9 @@ export default function NotificationsPage() {
             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
               {teamMembers.map((member) => {
                 const isSelected = selectedMembers.includes(member.id);
-                const memberAssignments = assignments.filter(a => a.memberId === member.id);
-                
+                // Count operations assigned to this member
+                const memberOpAssignments = operationAssignments.filter(a => a.memberId === member.id);
+                const memberOperationCount = memberOpAssignments.length;
                 return (
                   <div
                     key={member.id}

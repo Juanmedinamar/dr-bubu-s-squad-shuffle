@@ -168,11 +168,9 @@ const handler = async (req: Request): Promise<Response> => {
       }
 
       try {
-        // Sanitize and convert message to HTML
-        const sanitizedMessage = sanitizeHtml(recipient.message);
-        const htmlMessage = sanitizedMessage
-          .replace(/\n/g, '<br>')
-          .replace(/\*([^*]+)\*/g, '<strong>$1</strong>');
+        // Escape HTML to prevent XSS, then apply safe formatting
+        const escapedMessage = escapeHtml(recipient.message);
+        const htmlMessage = formatMessage(escapedMessage);
 
         const emailResponse = await resend.emails.send({
           from: "Dr. Bubu <onboarding@resend.dev>",

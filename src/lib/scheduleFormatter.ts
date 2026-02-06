@@ -1,4 +1,5 @@
-import { TeamMember, Assignment, Center, SHIFTS, DAYS_OF_WEEK } from '@/types';
+import { TeamMember, Center, Operation, SHIFTS, DAYS_OF_WEEK } from '@/types';
+import { OperationAssignment } from '@/hooks/useDatabase';
 import { format, startOfWeek, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -17,16 +18,27 @@ export function getWeekDates(weekOffset: number = 0): { date: Date; dateStr: str
   });
 }
 
-export function formatMemberSchedule(
+// New function using operations and operation_assignments
+export function formatMemberScheduleFromOperations(
   member: TeamMember,
-  assignments: Assignment[],
+  operations: Operation[],
+  operationAssignments: OperationAssignment[],
   centers: Center[],
   weekOffset: number = 0
 ): string {
   const weekDates = getWeekDates(weekOffset);
-  const memberAssignments = assignments.filter(a => a.memberId === member.id);
+  const weekDateStrs = weekDates.map(d => d.dateStr);
+  
+  // Get operation assignments for this member
+  const memberOpAssignments = operationAssignments.filter(a => a.memberId === member.id);
+  const memberOperationIds = memberOpAssignments.map(a => a.operationId);
+  
+  // Get operations for this member in the week
+  const memberOperations = operations.filter(
+    op => memberOperationIds.includes(op.id) && weekDateStrs.includes(op.date)
+  );
 
-  if (memberAssignments.length === 0) {
+  if (memberOperations.length === 0) {
     return `No tienes turnos asignados esta semana.`;
   }
 
@@ -35,16 +47,17 @@ export function formatMemberSchedule(
   lines.push('');
 
   weekDates.forEach(({ dateStr, dayName, date }) => {
-    const dayAssignments = memberAssignments.filter(a => a.date === dateStr);
-    if (dayAssignments.length > 0) {
+    const dayOperations = memberOperations.filter(op => op.date === dateStr);
+    if (dayOperations.length > 0) {
       const formattedDate = format(date, "d 'de' MMMM", { locale: es });
       lines.push(`*${dayName} ${formattedDate}:*`);
       
-      dayAssignments.forEach(assignment => {
-        const center = centers.find(c => c.id === assignment.centerId);
-        const shiftName = SHIFTS[assignment.shift];
+      dayOperations.forEach(operation => {
+        const center = centers.find(c => c.id === operation.centerId);
+        const shiftName = SHIFTS[operation.shift];
         if (center) {
           lines.push(`  📍 ${center.name} - ${shiftName}`);
+          lines.push(`     ${operation.specialty} - ${operation.type}`);
         }
       });
       lines.push('');
@@ -54,13 +67,15 @@ export function formatMemberSchedule(
   return lines.join('\n');
 }
 
-export function formatFullScheduleText(
+export function formatFullScheduleFromOperations(
   teamMembers: TeamMember[],
-  assignments: Assignment[],
+  operations: Operation[],
+  operationAssignments: OperationAssignment[],
   centers: Center[],
   weekOffset: number = 0
 ): string {
   const weekDates = getWeekDates(weekOffset);
+  const weekDateStrs = weekDates.map(d => d.dateStr);
   const weekStart = format(weekDates[0].date, "d 'de' MMMM", { locale: es });
   const weekEnd = format(weekDates[6].date, "d 'de' MMMM", { locale: es });
 
@@ -70,33 +85,41 @@ export function formatFullScheduleText(
   lines.push('═'.repeat(40));
   lines.push('');
 
+  // Get operations for the week
+  const weekOperations = operations.filter(op => weekDateStrs.includes(op.date));
+
   weekDates.forEach(({ dateStr, dayName, date }) => {
-    const dayAssignments = assignments.filter(a => a.date === dateStr);
-    if (dayAssignments.length > 0) {
+    const dayOperations = weekOperations.filter(op => op.date === dateStr);
+    if (dayOperations.length > 0) {
       const formattedDate = format(date, "d 'de' MMMM", { locale: es });
       lines.push(`▸ ${dayName.toUpperCase()} ${formattedDate}`);
       lines.push('-'.repeat(30));
 
       // Group by center
-      const centerGroups = new Map<string, Assignment[]>();
-      dayAssignments.forEach(a => {
-        if (!centerGroups.has(a.centerId)) {
-          centerGroups.set(a.centerId, []);
+      const centerGroups = new Map<string, Operation[]>();
+      dayOperations.forEach(op => {
+        if (!centerGroups.has(op.centerId)) {
+          centerGroups.set(op.centerId, []);
         }
-        centerGroups.get(a.centerId)!.push(a);
+        centerGroups.get(op.centerId)!.push(op);
       });
 
-      centerGroups.forEach((centerAssignments, centerId) => {
+      centerGroups.forEach((centerOps, centerId) => {
         const center = centers.find(c => c.id === centerId);
         if (center) {
           lines.push(`  🏥 ${center.name}`);
-          centerAssignments.forEach(assignment => {
-            const member = teamMembers.find(m => m.id === assignment.memberId);
-            const shiftName = SHIFTS[assignment.shift];
-            if (member) {
-              const role = member.role === 'anesthetist' ? '👨‍⚕️' : '👩‍⚕️';
-              lines.push(`     ${role} ${member.name} (${shiftName})`);
-            }
+          centerOps.forEach(operation => {
+            const opAssignments = operationAssignments.filter(a => a.operationId === operation.id);
+            const shiftName = SHIFTS[operation.shift];
+            lines.push(`     📋 ${operation.specialty} - ${operation.type} (${shiftName})`);
+            
+            opAssignments.forEach(assignment => {
+              const member = teamMembers.find(m => m.id === assignment.memberId);
+              if (member) {
+                const role = member.role === 'anesthetist' ? '👨‍⚕️' : '👩‍⚕️';
+                lines.push(`        ${role} ${member.name}`);
+              }
+            });
           });
         }
       });

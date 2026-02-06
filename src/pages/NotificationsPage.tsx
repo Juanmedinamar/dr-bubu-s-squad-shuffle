@@ -22,12 +22,12 @@ import {
   Check,
   RefreshCw
 } from 'lucide-react';
-import { useTeamMembers, useCenters, useAssignments } from '@/hooks/useDatabase';
+import { useTeamMembers, useCenters, useOperations, useOperationAssignments } from '@/hooks/useDatabase';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { formatMemberSchedule, getWeekDates } from '@/lib/scheduleFormatter';
+import { formatMemberScheduleFromOperations, getWeekDates } from '@/lib/scheduleFormatter';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 
@@ -35,7 +35,8 @@ export default function NotificationsPage() {
   const { role } = useAuth();
   const { data: teamMembers = [], isLoading: loadingMembers, refetch: refetchMembers } = useTeamMembers(role);
   const { data: centers = [], isLoading: loadingCenters, refetch: refetchCenters } = useCenters();
-  const { data: assignments = [], isLoading: loadingAssignments, refetch: refetchAssignments, dataUpdatedAt } = useAssignments();
+  const { data: operations = [], isLoading: loadingOperations, refetch: refetchOperations, dataUpdatedAt } = useOperations();
+  const { data: operationAssignments = [], isLoading: loadingOpAssignments, refetch: refetchOpAssignments } = useOperationAssignments();
   
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [customMessage, setCustomMessage] = useState('');
@@ -46,11 +47,11 @@ export default function NotificationsPage() {
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
   const [isRefreshing, setIsRefreshing] = useState(false);
 
-  const isLoading = loadingMembers || loadingCenters || loadingAssignments;
+  const isLoading = loadingMembers || loadingCenters || loadingOperations || loadingOpAssignments;
 
   const handleRefreshData = async () => {
     setIsRefreshing(true);
-    await Promise.all([refetchMembers(), refetchCenters(), refetchAssignments()]);
+    await Promise.all([refetchMembers(), refetchCenters(), refetchOperations(), refetchOpAssignments()]);
     setIsRefreshing(false);
     toast.success('Datos actualizados');
   };
@@ -80,7 +81,7 @@ export default function NotificationsPage() {
     const member = teamMembers.find(m => m.id === memberId);
     if (!member) return '';
     
-    const schedule = formatMemberSchedule(member, assignments, centers, 0);
+    const schedule = formatMemberScheduleFromOperations(member, operations, operationAssignments, centers, 0);
     const greeting = customMessage || `Hola ${member.name.split(' ')[0]},\n\nTe enviamos tu planificación de turnos para la próxima semana.`;
     
     return `${greeting}\n\n${schedule}\n\nSaludos,\nEquipo del Dr. Bubu`;
@@ -93,7 +94,8 @@ export default function NotificationsPage() {
         body: {
           teamMembers,
           centers,
-          assignments,
+          operations,
+          operationAssignments,
           weekStart,
           weekEnd,
         },
@@ -391,8 +393,9 @@ export default function NotificationsPage() {
             <div className="space-y-2 max-h-[500px] overflow-y-auto pr-2">
               {teamMembers.map((member) => {
                 const isSelected = selectedMembers.includes(member.id);
-                const memberAssignments = assignments.filter(a => a.memberId === member.id);
-                
+                // Count operations assigned to this member
+                const memberOpAssignments = operationAssignments.filter(a => a.memberId === member.id);
+                const memberOperationCount = memberOpAssignments.length;
                 return (
                   <div
                     key={member.id}
@@ -419,7 +422,7 @@ export default function NotificationsPage() {
                     <div className="flex-1 min-w-0">
                       <p className="text-sm font-medium truncate">{member.name}</p>
                       <p className="text-xs text-muted-foreground truncate">
-                        {memberAssignments.length} turnos · {member.email || member.phone || 'Sin contacto'}
+                        {memberOperationCount} operaciones · {member.email || member.phone || 'Sin contacto'}
                       </p>
                     </div>
                     {isSelected && (

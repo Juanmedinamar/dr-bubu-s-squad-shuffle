@@ -22,12 +22,12 @@ import {
   Check,
   RefreshCw
 } from 'lucide-react';
-import { useTeamMembers, useCenters, useAssignments } from '@/hooks/useDatabase';
+import { useTeamMembers, useCenters, useOperations, useOperationAssignments } from '@/hooks/useDatabase';
 import { useAuth } from '@/hooks/useAuth';
 import { cn } from '@/lib/utils';
 import { toast } from 'sonner';
 import { supabase } from '@/integrations/supabase/client';
-import { formatMemberSchedule, getWeekDates } from '@/lib/scheduleFormatter';
+import { formatMemberScheduleFromOperations, getWeekDates } from '@/lib/scheduleFormatter';
 import { format } from 'date-fns';
 import { es } from 'date-fns/locale';
 

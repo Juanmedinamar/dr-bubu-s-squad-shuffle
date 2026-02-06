@@ -38,7 +38,8 @@ const alertStyles = {
 export function AlertsPanel() {
   const { role } = useAuth();
   const { data: teamMembers = [] } = useTeamMembers(role);
-  const { data: assignments = [] } = useAssignments();
+  const { data: operations = [] } = useOperations();
+  const { data: operationAssignments = [] } = useOperationAssignments();
   const { data: centers = [] } = useCenters();
 
   const alerts = useMemo<Alert[]>(() => {

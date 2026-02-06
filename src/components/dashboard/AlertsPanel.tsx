@@ -58,9 +58,26 @@ export function AlertsPanel() {
       format(addDays(nextMonday, i), 'yyyy-MM-dd')
     );
 
+    // Build assignments from operations and operationAssignments
+    type DerivedAssignment = { memberId: string; centerId: string; date: string; shift: string; operationId: string };
+    const derivedAssignments: DerivedAssignment[] = [];
+    
+    operations.forEach(op => {
+      const opAssignments = operationAssignments.filter(a => a.operationId === op.id);
+      opAssignments.forEach(a => {
+        derivedAssignments.push({
+          memberId: a.memberId,
+          centerId: op.centerId,
+          date: op.date,
+          shift: op.shift,
+          operationId: op.id,
+        });
+      });
+    });
+
     // Check for incompatible members assigned same day/shift
-    const assignmentsByDayShift = new Map<string, typeof assignments>();
-    assignments.forEach(a => {
+    const assignmentsByDayShift = new Map<string, DerivedAssignment[]>();
+    derivedAssignments.forEach(a => {
       const key = `${a.date}-${a.shift}`;
       if (!assignmentsByDayShift.has(key)) {
         assignmentsByDayShift.set(key, []);
@@ -95,13 +112,13 @@ export function AlertsPanel() {
     });
 
     // Check for members assigned to excluded centers
-    assignments.forEach(a => {
+    derivedAssignments.forEach(a => {
       const member = teamMembers.find(m => m.id === a.memberId);
       const center = centers.find(c => c.id === a.centerId);
       
       if (member && center && member.excludedCenters?.includes(a.centerId)) {
         result.push({
-          id: `excluded-${a.id}`,
+          id: `excluded-${a.operationId}-${a.memberId}`,
           type: 'warning',
           message: `${member.name.split(' ')[0]} asignado a ${center.name} (centro excluido)`,
           time: format(new Date(a.date), "d 'de' MMMM", { locale: es }),
@@ -109,37 +126,46 @@ export function AlertsPanel() {
       }
     });
 
-    // Check if this week has assignments
-    const thisWeekAssignments = assignments.filter(a => weekDates.includes(a.date));
-    if (thisWeekAssignments.length > 0) {
+    // Check if this week has operations
+    const thisWeekOperations = operations.filter(op => weekDates.includes(op.date));
+    if (thisWeekOperations.length > 0) {
+      const thisWeekAssignments = derivedAssignments.filter(a => weekDates.includes(a.date));
       result.push({
         id: 'week-complete',
         type: 'success',
-        message: `Planificación de esta semana completada (${thisWeekAssignments.length} turnos)`,
+        message: `Esta semana: ${thisWeekOperations.length} operaciones, ${thisWeekAssignments.length} asignaciones`,
         time: 'Esta semana',
       });
     }
 
     // Check if next week needs planning
-    const nextWeekAssignments = assignments.filter(a => nextWeekDates.includes(a.date));
-    if (nextWeekAssignments.length === 0) {
+    const nextWeekOperations = operations.filter(op => nextWeekDates.includes(op.date));
+    const nextWeekAssignments = derivedAssignments.filter(a => nextWeekDates.includes(a.date));
+    if (nextWeekOperations.length === 0) {
       result.push({
         id: 'next-week-pending',
         type: 'info',
-        message: 'Planificación pendiente para la próxima semana',
+        message: 'No hay operaciones programadas para la próxima semana',
+        time: 'Próxima semana',
+      });
+    } else if (nextWeekAssignments.length === 0) {
+      result.push({
+        id: 'next-week-no-staff',
+        type: 'info',
+        message: `${nextWeekOperations.length} operaciones sin personal asignado`,
         time: 'Próxima semana',
       });
     } else {
       result.push({
         id: 'next-week-complete',
         type: 'success',
-        message: `Próxima semana tiene ${nextWeekAssignments.length} turnos planificados`,
+        message: `Próxima semana: ${nextWeekOperations.length} operaciones, ${nextWeekAssignments.length} asignaciones`,
         time: 'Próxima semana',
       });
     }
 
     return result.slice(0, 5); // Limit to 5 alerts
-  }, [teamMembers, assignments, centers]);
+  }, [teamMembers, operations, operationAssignments, centers]);
 
   if (alerts.length === 0) {
     return (

@@ -19,7 +19,8 @@ import {
   Download,
   Loader2,
   Copy,
-  Check
+  Check,
+  RefreshCw
 } from 'lucide-react';
 import { useTeamMembers, useCenters, useAssignments } from '@/hooks/useDatabase';
 import { useAuth } from '@/hooks/useAuth';
@@ -32,9 +33,9 @@ import { es } from 'date-fns/locale';
 
 export default function NotificationsPage() {
   const { role } = useAuth();
-  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers(role);
-  const { data: centers = [], isLoading: loadingCenters } = useCenters();
-  const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
+  const { data: teamMembers = [], isLoading: loadingMembers, refetch: refetchMembers } = useTeamMembers(role);
+  const { data: centers = [], isLoading: loadingCenters, refetch: refetchCenters } = useCenters();
+  const { data: assignments = [], isLoading: loadingAssignments, refetch: refetchAssignments, dataUpdatedAt } = useAssignments();
   
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [customMessage, setCustomMessage] = useState('');
@@ -43,8 +44,16 @@ export default function NotificationsPage() {
   const [whatsappLinks, setWhatsappLinks] = useState<Array<{ name: string; phone: string; url: string; message: string }>>([]);
   const [showWhatsappDialog, setShowWhatsappDialog] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const isLoading = loadingMembers || loadingCenters || loadingAssignments;
+
+  const handleRefreshData = async () => {
+    setIsRefreshing(true);
+    await Promise.all([refetchMembers(), refetchCenters(), refetchAssignments()]);
+    setIsRefreshing(false);
+    toast.success('Datos actualizados');
+  };
 
   const weekDates = getWeekDates(0);
   const weekStart = weekDates[0].dateStr;
@@ -234,22 +243,38 @@ export default function NotificationsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Planificación de la semana</CardTitle>
-                  <CardDescription>
+                  <CardDescription className="flex items-center gap-2">
                     {weekLabel}
+                    {dataUpdatedAt && (
+                      <span className="text-xs text-muted-foreground">
+                        · Datos de {format(new Date(dataUpdatedAt), "HH:mm", { locale: es })}
+                      </span>
+                    )}
                   </CardDescription>
                 </div>
-                <Button 
-                  variant="outline" 
-                  onClick={handleDownloadPdf}
-                  disabled={generatingPdf}
-                >
-                  {generatingPdf ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Descargar PDF
-                </Button>
+                <div className="flex gap-2">
+                  <Button 
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleRefreshData}
+                    disabled={isRefreshing}
+                    title="Actualizar datos"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleDownloadPdf}
+                    disabled={generatingPdf}
+                  >
+                    {generatingPdf ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    Descargar PDF
+                  </Button>
+                </div>
               </div>
             </CardHeader>
             <CardContent className="space-y-4">

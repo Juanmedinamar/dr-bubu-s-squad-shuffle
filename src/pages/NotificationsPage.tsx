@@ -32,9 +32,9 @@ import { es } from 'date-fns/locale';
 
 export default function NotificationsPage() {
   const { role } = useAuth();
-  const { data: teamMembers = [], isLoading: loadingMembers } = useTeamMembers(role);
-  const { data: centers = [], isLoading: loadingCenters } = useCenters();
-  const { data: assignments = [], isLoading: loadingAssignments } = useAssignments();
+  const { data: teamMembers = [], isLoading: loadingMembers, refetch: refetchMembers } = useTeamMembers(role);
+  const { data: centers = [], isLoading: loadingCenters, refetch: refetchCenters } = useCenters();
+  const { data: assignments = [], isLoading: loadingAssignments, refetch: refetchAssignments, dataUpdatedAt } = useAssignments();
   
   const [selectedMembers, setSelectedMembers] = useState<string[]>([]);
   const [customMessage, setCustomMessage] = useState('');
@@ -43,8 +43,16 @@ export default function NotificationsPage() {
   const [whatsappLinks, setWhatsappLinks] = useState<Array<{ name: string; phone: string; url: string; message: string }>>([]);
   const [showWhatsappDialog, setShowWhatsappDialog] = useState(false);
   const [copiedIndex, setCopiedIndex] = useState<number | null>(null);
+  const [isRefreshing, setIsRefreshing] = useState(false);
 
   const isLoading = loadingMembers || loadingCenters || loadingAssignments;
+
+  const handleRefreshData = async () => {
+    setIsRefreshing(true);
+    await Promise.all([refetchMembers(), refetchCenters(), refetchAssignments()]);
+    setIsRefreshing(false);
+    toast.success('Datos actualizados');
+  };
 
   const weekDates = getWeekDates(0);
   const weekStart = weekDates[0].dateStr;

@@ -243,21 +243,38 @@ export default function NotificationsPage() {
               <div className="flex items-center justify-between">
                 <div>
                   <CardTitle>Planificación de la semana</CardTitle>
-                  <CardDescription>
+                  <CardDescription className="flex items-center gap-2">
                     {weekLabel}
+                    {dataUpdatedAt && (
+                      <span className="text-xs text-muted-foreground">
+                        · Datos de {format(new Date(dataUpdatedAt), "HH:mm", { locale: es })}
+                      </span>
+                    )}
                   </CardDescription>
                 </div>
-                <Button 
-                  variant="outline" 
-                  onClick={handleDownloadPdf}
-                  disabled={generatingPdf}
-                >
-                  {generatingPdf ? (
-                    <Loader2 className="mr-2 h-4 w-4 animate-spin" />
-                  ) : (
-                    <Download className="mr-2 h-4 w-4" />
-                  )}
-                  Descargar PDF
+                <div className="flex gap-2">
+                  <Button 
+                    variant="ghost"
+                    size="icon"
+                    onClick={handleRefreshData}
+                    disabled={isRefreshing}
+                    title="Actualizar datos"
+                  >
+                    <RefreshCw className={cn("h-4 w-4", isRefreshing && "animate-spin")} />
+                  </Button>
+                  <Button 
+                    variant="outline" 
+                    onClick={handleDownloadPdf}
+                    disabled={generatingPdf}
+                  >
+                    {generatingPdf ? (
+                      <Loader2 className="mr-2 h-4 w-4 animate-spin" />
+                    ) : (
+                      <Download className="mr-2 h-4 w-4" />
+                    )}
+                    Descargar PDF
+                  </Button>
+                </div>
                 </Button>
               </div>
             </CardHeader>

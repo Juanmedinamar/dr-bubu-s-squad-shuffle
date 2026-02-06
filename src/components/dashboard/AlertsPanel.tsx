@@ -2,7 +2,7 @@ import { useMemo } from 'react';
 import { AlertTriangle, CheckCircle, Clock, Info } from 'lucide-react';
 import { Card, CardContent, CardHeader, CardTitle } from '@/components/ui/card';
 import { cn } from '@/lib/utils';
-import { useTeamMembers, useAssignments, useCenters } from '@/hooks/useDatabase';
+import { useTeamMembers, useCenters, useOperations, useOperationAssignments } from '@/hooks/useDatabase';
 import { useAuth } from '@/hooks/useAuth';
 import { format, startOfWeek, addDays } from 'date-fns';
 import { es } from 'date-fns/locale';

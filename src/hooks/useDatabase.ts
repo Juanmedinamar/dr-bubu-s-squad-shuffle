@@ -229,6 +229,8 @@ export function useAssignments() {
     },
     staleTime: 0, // Always refetch to ensure fresh data
     refetchOnMount: 'always', // Refetch when component mounts
+    refetchOnWindowFocus: true, // Refetch when window regains focus
+    gcTime: 0, // Don't cache (formerly cacheTime)
   });
 }
 
